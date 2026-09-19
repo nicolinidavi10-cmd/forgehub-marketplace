@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brenntag | Marketplace Industrial</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <a class="brand" href="#home" aria-label="Brenntag início">
+      <span class="brand-mark">B</span>
+      <span>BRENNTAG<small>INDUSTRIAL MARKETPLACE</small></span>
+    </a>
+
+    <div class="search">
+      <span>⌕</span>
+      <input id="searchInput" placeholder="Buscar instrumentos, ferramentas e equipamentos...">
+    </div>
+
+    <nav>
+      <a href="#products">Produtos</a>
+      <a href="#buyerOrdersSection" id="ordersNav">Pedidos</a>
+      <a href="login.html">Conta</a>
+      <button class="support-nav" id="supportButton"><span>◌</span> Atendimento</button>
+      <button class="cart" id="cartButton">
+        Carrinho <b id="cartCount">0</b>
+      </button>
+    </nav>
+  </header>
+
+  <div id="sakuraLayer" class="sakura-layer" aria-hidden="true"></div>
+
+  <main>
+    <section class="hero-jp" id="home">
+      <div class="hero-jp-glow"></div>
+      <div class="hero-jp-content">
+        <div>
+          <p class="hero-jp-eyebrow">CATÁLOGO 2026</p>
+          <h1>Ferramentas<br>que entregam<br><em>precisão.</em></h1>
+          <div class="hero-jp-line"></div>
+          <p class="hero-jp-text">Instrumentos selecionados para ambientes industriais.</p>
+          <div class="hero-actions">
+            <a class="hero-cta hero-cta-primary" href="#products">Ver produtos <span>→</span></a>
+            <a class="hero-cta hero-cta-secondary" href="#products">Explorar categorias</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-jp-art" aria-hidden="true">
+        <div class="hero-moon"></div>
+        <div class="hero-mountains"></div>
+        <div class="hero-water"></div>
+        <div class="hero-torii">
+          <span class="torii-top"></span>
+          <span class="torii-under"></span>
+          <span class="torii-post torii-left"></span>
+          <span class="torii-post torii-right"></span>
+          <span class="torii-beam torii-mid"></span>
+        </div>
+        <div class="hero-jp-kanji">精<br>度<br>が<br>未<br>来<br>を<br>作<br>る</div>
+      </div>
+    </section>
+
+    <section class="section" id="products">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">CATÁLOGO</p>
+          <h2>Produtos em destaque</h2>
+        </div>
+        <div class="filters" id="filters"></div>
+      </div>
+
+      <div class="product-grid" id="productGrid"></div>
+    </section>
+
+    <section class="section operational" id="orders">
+      <div>
+        <p class="eyebrow">OPERAÇÃO</p>
+        <h2>Compra simples.<br>Controle completo.</h2>
+        <p>Do pedido ao estoque, cada movimentação pode ser acompanhada em um único ambiente.</p>
+      </div>
+
+      <div class="steps">
+        <div><b>01</b><strong>Escolha</strong><span>Encontre o equipamento ideal.</span></div>
+        <div><b>02</b><strong>Pedido</strong><span>Finalize com pagamento simulado.</span></div>
+        <div><b>03</b><strong>Expedição</strong><span>A empresa prepara e envia.</span></div>
+      </div>
+
+      <div class="order-tracking-wrap" id="buyerOrdersSection">
+        <div class="order-tracking-head">
+          <div>
+            <p class="eyebrow">ACOMPANHAMENTO</p>
+            <h3>Meus pedidos</h3>
+            <p>Acompanhe em qual etapa está cada pedido pela sua conta.</p>
+          </div>
+          <span class="order-tracking-live">● Atualização automática</span>
+        </div>
+        <div id="buyerOrders" class="buyer-orders"></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="page-loader hidden" id="pageLoader" aria-live="polite" aria-busy="true">
+    <div class="page-loader-card">
+      <div class="page-loader-gear">⚙</div>
+      <p class="page-loader-text" id="pageLoaderText">Processando...</p>
+      <p class="page-loader-subtext">Só um instante</p>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="supportModal">
+    <div class="support-modal" role="dialog" aria-modal="true" aria-labelledby="supportTitle">
+      <aside class="support-sidebar">
+        <div class="support-brand"><span class="support-brand-icon">B</span><div><strong>Atendimento</strong><small>BRENNTAG · EQUIPE COMERCIAL</small></div></div>
+        <div class="support-status"><span class="status-dot"></span><div><strong>Equipe disponível</strong><small>Resposta durante o atendimento</small></div></div>
+        <div class="support-info">
+          <span class="support-kicker">ATENDIMENTO COMERCIAL</span>
+          <h3>Estamos aqui para ajudar.</h3>
+          <p>Informe seus dados para abrir um atendimento e falar com nossa equipe.</p>
+        </div>
+        <div class="protocol-card hidden" id="supportProtocolCard"><small>PROTOCOLO</small><strong id="supportProtocol">ATD-00000000-0000</strong></div>
+      </aside>
+      <section class="support-chat">
+        <header class="support-chat-head"><div><span class="support-kicker">FALE COM A NOSSA EQUIPE</span><h2 id="supportTitle">Atendimento comercial</h2><p id="supportSubtitle">Vamos começar com algumas informações.</p></div><div class="support-chat-head-actions"><button class="close support-close" data-close type="button" title="Fechar aba" aria-label="Fechar aba">×</button></div></header>
+        <div class="support-messages" id="supportMessages"></div>
+        <div class="support-composer" id="supportComposer"></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="productModal">
+    <div class="modal-box">
+      <button class="close" data-close>×</button>
+      <div id="productDetail"></div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="cartModal">
+    <div class="modal-box">
+      <button class="close" data-close>×</button>
+      <div id="cartDetail"></div>
+    </div>
+  </div>
+
+  <!-- COMPROVANTE PIX -->
+  <div class="modal hidden" id="receiptModal">
+    <div class="modal-box receipt-box">
+      <button class="close" data-close>×</button>
+      <div id="receiptDetail"></div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="termsModal">
+  <div class="modal-box terms-modal-box">
+    <button class="close" data-close>×</button>
+    <div id="termsContent"></div>
+  </div>
+</div>
+
+<footer>BRENNTAG © 2026 · Marketplace Industrial</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

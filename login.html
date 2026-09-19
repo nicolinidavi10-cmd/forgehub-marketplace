@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conta | BRENNTAG</title>
+  <link rel="stylesheet" href="login.css">
+</head>
+<body>
+  <main class="login-shell">
+    <section class="login-card">
+      <a class="brand" href="index.html">
+        <span class="brand-mark">B</span>
+        <span>BRENNTAG<small>INDUSTRIAL MARKETPLACE</small></span>
+      </a>
+
+      <div class="login-content">
+        <p class="eyebrow">CONTA BRENNTAG</p>
+        <h1>Acessar conta</h1>
+        <p class="subtitle">Com uma conta você compra, acompanha pedidos e o sistema identifica automaticamente quando o acesso é administrativo.</p>
+
+        <div class="auth-tabs">
+          <button type="button" class="auth-tab active" data-auth-tab="login">Entrar</button>
+          <button type="button" class="auth-tab" data-auth-tab="signup">Criar conta</button>
+        </div>
+
+        <section id="loginPanel" class="auth-panel active">
+          <form id="loginForm">
+            <label for="username">E-mail</label>
+            <input id="username" type="email" placeholder="seu@email.com" autocomplete="email" required>
+            <label for="password">Senha</label>
+            <input id="password" type="password" placeholder="Digite sua senha" autocomplete="current-password" required>
+            <p class="demo-note">O acesso é validado pelo Supabase Authentication.</p>
+            <p class="error" id="loginError"></p>
+            <p class="message" id="loginInfo"></p>
+            <button type="submit">Entrar <span>→</span></button>
+          </form>
+        </section>
+
+        <section id="signupPanel" class="auth-panel">
+          <form id="signupForm">
+            <label for="signupName">Nome</label>
+            <input id="signupName" type="text" placeholder="Seu nome" autocomplete="name" required>
+            <label for="signupEmail">E-mail</label>
+            <input id="signupEmail" type="email" placeholder="seu@email.com" autocomplete="email" required>
+            <label for="signupPassword">Senha</label>
+            <input id="signupPassword" type="password" placeholder="Mínimo de 6 caracteres" autocomplete="new-password" required>
+            <p class="error" id="signupError"></p>
+            <button type="submit">Criar conta <span>→</span></button>
+          </form>
+        </section>
+      </div>
+
+      <a class="back-link" href="index.html">← Voltar para a loja</a>
+    </section>
+
+    <aside class="login-side">
+      <span class="tag">BRENNTAG</span>
+      <strong>Precisão na<br><em>operação.</em></strong>
+      <p>Pedidos, estoque, produtos e informações financeiras em um único ambiente.</p>
+      <div class="side-line"></div>
+      <small>CONTA E ADMINISTRAÇÃO · 2026</small>
+    </aside>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="login.js"></script>
+</body>
+</html>

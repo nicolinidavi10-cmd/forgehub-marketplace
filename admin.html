@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Administração | Brenntag</title><link rel="stylesheet" href="admin.css"><style>
+
+/* Modal de exclusão: sempre preso à janela, nunca ao fluxo da página */
+#deleteConfirmModal.delete-modal,
+.delete-modal#deleteConfirmModal {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
+  margin: 0 !important;
+  padding: 20px !important;
+  box-sizing: border-box !important;
+  display: grid !important;
+  place-items: center !important;
+  z-index: 2147483647 !important;
+  overflow: hidden !important;
+}
+#deleteConfirmModal.delete-modal.hidden,
+.delete-modal#deleteConfirmModal.hidden {
+  display: none !important;
+}
+#deleteConfirmModal .delete-modal-backdrop {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: rgba(8,15,22,.58) !important;
+  backdrop-filter: blur(3px) !important;
+}
+#deleteConfirmModal .delete-modal-card {
+  position: relative !important;
+  z-index: 1 !important;
+  width: min(430px, calc(100vw - 40px)) !important;
+  max-height: calc(100vh - 40px) !important;
+  overflow: auto !important;
+  box-sizing: border-box !important;
+  margin: auto !important;
+}
+html:has(#deleteConfirmModal:not(.hidden)),
+body:has(#deleteConfirmModal:not(.hidden)) {
+  overflow: hidden !important;
+}
+
+</style>
+</head>
+<body><div class="admin-shell">
+<aside class="sidebar"><div class="sidebar-brand"><span class="sidebar-mark">B</span><div><strong>BRENNTAG</strong><small>ADMINISTRAÇÃO</small></div></div>
+<ul class="nav-group">
+<li><a href="#visao" class="active" data-section="visao"><span class="ic">▦</span> Visão geral</a></li>
+<li><a href="#pedidos" data-section="pedidos"><span class="ic">□</span> Pedidos feitos</a></li>
+<li><a data-goto="estoque" href="#estoque" data-section="estoque"><span class="ic">▤</span> Estoque</a></li>
+<li><a href="#produtos" data-section="produtos"><span class="ic">◈</span> Gestão de produtos</a></li>
+<li><a data-goto="financeiro" href="#financeiro" data-section="financeiro"><span class="ic">↗</span> Financeiro</a></li>
+<li><a href="#atendimentos" data-section="atendimentos"><span class="ic">◌</span> Atendimentos</a></li>
+</ul><div class="sidebar-foot"><a href="index.html">← Voltar à loja</a><a href="#" id="logoutButton">↪ Sair do painel</a><div class="status-pill"><span class="status-dot"></span> Sistema protegido</div></div></aside>
+<main class="admin-main">
+<header class="admin-header"><div><h1 id="greeting">Bom dia, Administrador.</h1><p id="headerDescription">Dados calculados a partir dos acontecimentos reais da loja.</p></div><div><div class="header-user" id="headerUser">Administrador</div><div class="header-meta"><div><span>Data</span><b id="todayDate">—</b></div><div><span>Status</span><b class="ok">● Operando</b></div><div><span>Atualização</span><b id="lastUpdate">—</b></div></div></div></header>
+
+<section id="visaoSection" class="admin-section"><div class="stat-grid">
+<article class="stat-card orders" data-section="pedidos"><span class="stat-icon">□</span><p class="stat-label">Pedidos feitos</p><p class="stat-value" id="statOrders">0</p><p class="stat-sub up" id="statOrdersSub">0 esta semana</p></article>
+<article class="stat-card stock" data-section="estoque"><span class="stat-icon">▤</span><p class="stat-label">Estoque</p><p class="stat-value" id="statStock">0 unidades</p><p class="stat-sub" id="statStockSub">0 produtos cadastrados</p><p class="stat-sub warn" id="statStockAlert">0 produtos com estoque baixo</p></article>
+<article class="stat-card income" data-section="financeiro"><span class="stat-icon">↑</span><p class="stat-label">Valores que entraram</p><p class="stat-value" id="statIncome">R$ 0,00</p><p class="stat-sub">Receita acumulada</p></article>
+<article class="stat-card expense" data-section="financeiro"><span class="stat-icon">↓</span><p class="stat-label">Valores que saíram</p><p class="stat-value" id="statExpense">R$ 0,00</p><p class="stat-sub">Despesas registradas</p></article></div>
+<div class="chart-row"><div class="panel"><div class="panel-head"><h3>Movimentação financeira</h3><div class="legend"><span class="in"><i></i>Entradas</span><span class="out"><i></i>Saídas</span></div></div><div class="bar-chart" id="financeChart"></div></div><div class="panel"><div class="panel-head"><h3>Composição do estoque</h3></div><div class="donut-wrap"><div class="donut" id="stockDonut"><div class="donut-center"><b id="donutTotalUnits">0</b><span>unidades</span></div></div><ul class="donut-legend" id="stockLegend"></ul></div></div></div>
+<div class="shortcut-row"><a class="shortcut" href="#pedidos" data-section="pedidos"><span class="sc-icon">□</span><strong>Pedidos feitos</strong><span>Visualize, altere o status e consulte os pedidos reais.</span></a><a data-goto="estoque" class="shortcut" href="#estoque" data-section="estoque"><span class="sc-icon">▤</span><strong>Controle de estoque</strong><span>Ajuste quantidades e registre movimentações.</span></a><a data-goto="financeiro" class="shortcut" href="#financeiro" data-section="financeiro"><span class="sc-icon">↗</span><strong>Financeiro</strong><span>Consulte entradas, despesas e saldo acumulado.</span></a></div>
+</section>
+
+<section id="pedidosSection" class="admin-section panel section-panel"><div class="panel-head"><div><h3>Pedidos feitos</h3><p class="section-note">Cada pedido vem do checkout da loja e altera o estoque automaticamente.</p></div><span id="ordersCountLabel">0 pedidos</span></div><div class="toolbar"><input id="orderSearch" placeholder="Pesquisar pedido ou produto..."><select id="orderStatusFilter"><option value="">Todos os status</option><option>Recebido</option><option>Em separação</option><option>Enviado</option><option>Concluído</option><option>Cancelado</option></select></div><div class="responsive-table"><table class="moves data-table"><thead><tr><th>Pedido</th><th>Data</th><th>Itens</th><th>Status</th><th>Valor</th><th>Ação</th></tr></thead><tbody id="ordersBody"></tbody></table></div></section>
+
+<section id="estoqueSection" class="admin-section panel section-panel"><div class="panel-head"><div><h3>Estoque</h3><p class="section-note">O saldo abaixo é a quantidade atual dos produtos cadastrados.</p></div><span id="stockCountLabel">0 unidades</span></div><div class="toolbar"><input id="stockSearch" placeholder="Pesquisar produto..."><button class="primary-btn" id="openProductFromStock">+ Novo produto</button></div><div class="responsive-table"><table class="moves data-table"><thead><tr><th>Produto</th><th>Categoria</th><th>Quantidade</th><th>Preço</th><th>Situação</th><th>Ação</th></tr></thead><tbody id="stockBody"></tbody></table></div></section>
+
+<section id="produtosSection" class="admin-section panel section-panel"><div class="panel-head"><div><h3>Gestão de produtos</h3><p class="section-note">Cadastre, edite ou remova produtos. A loja usa exatamente estes dados.</p></div><button class="primary-btn" id="openProduct">+ Cadastrar produto</button></div><div class="product-admin-grid" id="productCards"></div></section>
+
+<section id="financeiroSection" class="admin-section panel section-panel"><div class="panel-head"><div><h3>Financeiro</h3><p class="section-note">Entradas são pedidos finalizados; saídas são despesas registradas aqui.</p></div><button class="primary-btn" id="openExpense">+ Registrar despesa</button></div><div class="finance-summary"><div><span>Entradas</span><b id="financeIncome">R$ 0,00</b></div><div><span>Saídas</span><b id="financeExpense">R$ 0,00</b></div><div><span>Saldo</span><b id="financeBalance">R$ 0,00</b></div></div><div class="responsive-table"><table class="moves data-table"><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Valor</th><th>Ação</th></tr></thead><tbody id="financeBody"></tbody></table></div></section>
+
+<section id="atendimentosSection" class="admin-section panel section-panel">
+  <div class="panel-head"><div><h3>Atendimentos</h3><p class="section-note">Acompanhe os clientes em tempo real e responda às conversas comerciais.</p></div><span id="supportCountLabel">0 atendimentos</span></div>
+  <div class="toolbar"><input id="supportSearch" placeholder="Pesquisar protocolo, cliente ou e-mail..."><select id="supportStatusFilter"><option value="">Todos os status</option><option>Aguardando admin</option><option>Em atendimento</option><option>Aguardando cliente</option><option>Encerrado</option></select></div>
+  <div class="support-admin-layout"><div class="support-admin-list" id="supportAdminList"></div></div>
+</section>
+
+<div class="support-admin-modal hidden" id="supportAdminModal" role="dialog" aria-modal="true" aria-labelledby="supportAdminModalTitle">
+  <div class="support-admin-modal-backdrop" data-support-modal-close></div>
+  <div class="support-admin-chat" id="supportAdminChat">
+    <div class="support-empty"><strong>Selecione um atendimento</strong><span>As mensagens do cliente aparecerão aqui.</span></div>
+  </div>
+</div>
+
+<section id="termosSection" class="admin-section panel section-panel">
+  <div class="panel-head"><div><h3>Termos de compra</h3><p class="section-note">Edite as condições que o comprador precisa aceitar antes de finalizar o pedido.</p></div><button class="primary-btn" id="openTerms">Editar termos</button></div>
+  <div class="terms-admin-card"><div><span id="termsVersion">Nenhuma versão</span><h3 id="termsTitle">Termos não cadastrados</h3><p id="termsPreview">Cadastre os termos de compra, reembolso e cancelamento.</p></div></div>
+</section>
+
+<section class="panel table-panel"><div class="panel-head"><h3>Últimas movimentações</h3></div><table class="moves"><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th style="text-align:right">Valor</th></tr></thead><tbody id="movesBody"></tbody></table></section>
+</main></div>
+<div class="page-loader hidden" id="pageLoader" aria-live="polite" aria-busy="true">
+  <div class="page-loader-card">
+    <div class="page-loader-gear">⚙</div>
+    <p class="page-loader-text" id="pageLoaderText">Processando...</p>
+    <p class="page-loader-subtext">Só um instante</p>
+  </div>
+</div>
+<div class="modal hidden" id="adminModal"><div class="modal-box"><button class="modal-close" data-close>×</button><div id="modalContent"></div></div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script src="admin.js"></script>
+<div id="deleteConfirmModal" class="delete-modal hidden" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
+    <div class="delete-modal-backdrop" data-delete-cancel></div>
+
+    <div class="delete-modal-card">
+        <div class="delete-modal-icon">
+            !
+        </div>
+
+        <div class="delete-modal-content">
+            <span class="delete-modal-kicker">AÇÃO IRREVERSÍVEL</span>
+
+            <h3 id="deleteConfirmTitle">Excluir produto?</h3>
+
+            <p id="deleteConfirmText">
+                Esta ação não poderá ser desfeita.
+            </p>
+
+            <div class="delete-modal-actions">
+                <button
+                    type="button"
+                    class="delete-cancel-btn"
+                    data-delete-cancel>
+                    Manter produto
+                </button>
+
+                <button
+                    type="button"
+                    class="delete-confirm-btn"
+                    id="deleteConfirmBtn">
+                    Excluir produto
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body></html>
