@@ -515,6 +515,8 @@ async function createOrderFromCart() {
 
     if (orderError) throw orderError;
 
+    await uploadInvoiceDraft(order, session);
+
     cart = [];
     updateCart();
     document.querySelector('#cartModal').classList.add('hidden');
@@ -527,6 +529,93 @@ async function createOrderFromCart() {
     hidePageLoader();
     button.disabled = false;
     showToast(error.message || 'Não foi possível finalizar o pedido.', 'error');
+  }
+}
+
+
+async function generateInvoiceDraftPDF(order, session) {
+  if (!window.jspdf?.jsPDF) throw new Error('Biblioteca de PDF não carregada.');
+  const doc = new window.jspdf.jsPDF();
+  const orderNumber = String(order.id).padStart(6, '0');
+  const user = session?.user;
+  const customerName = user?.user_metadata?.full_name || 'Cliente';
+  const customerEmail = user?.email || '';
+  let y = 18;
+
+  doc.setFontSize(18); doc.setFont(undefined, 'bold'); doc.text('BRENNTAG', 14, y);
+  doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.text('INDUSTRIAL MARKETPLACE', 14, y + 6);
+  doc.setFontSize(15); doc.setFont(undefined, 'bold'); doc.text('DOCUMENTO DE VENDA / NF', 14, y + 20);
+  doc.setFontSize(9); doc.setFont(undefined, 'normal');
+  doc.text('RASCUNHO — PENDENTE DE REVISÃO ADMINISTRATIVA', 14, y + 27);
+  y += 42;
+
+  doc.setDrawColor(160); doc.rect(14, y - 5, 182, 28);
+  doc.setFont(undefined, 'bold'); doc.text(`Pedido #${orderNumber}`, 18, y + 3);
+  doc.setFont(undefined, 'normal');
+  doc.text(`Emissão: ${new Date(order.created_at).toLocaleString('pt-BR')}`, 18, y + 10);
+  doc.text(`Pagamento: Pix — Simulado`, 18, y + 17);
+  doc.text(`E-mail: ${customerEmail || 'não informado'}`, 105, y + 10);
+  y += 36;
+
+  doc.setFont(undefined, 'bold'); doc.text('DESTINATÁRIO', 14, y);
+  doc.setFont(undefined, 'normal');
+  doc.text(`Nome: ${customerName}`, 14, y + 7);
+  doc.text(`E-mail: ${customerEmail || 'não informado'}`, 14, y + 14);
+  y += 25;
+
+  doc.setFont(undefined, 'bold'); doc.text('ITENS DA VENDA', 14, y);
+  y += 7;
+  doc.line(14, y, 196, y); y += 7;
+  doc.setFont(undefined, 'bold'); doc.text('Produto', 14, y); doc.text('Qtd.', 130, y); doc.text('Valor', 165, y);
+  y += 6; doc.setFont(undefined, 'normal');
+  for (const item of (order.order_items || [])) {
+    const name = String(item.product_name || '').slice(0, 58);
+    doc.text(name, 14, y);
+    doc.text(String(item.quantity || 0), 132, y);
+    doc.text(`R$ ${money(item.subtotal)}`, 165, y);
+    y += 7;
+    if (y > 260) { doc.addPage(); y = 20; }
+  }
+  doc.line(14, y + 2, 196, y + 2); y += 12;
+  const subtotal = Number(order.subtotal ?? (order.order_items || []).reduce((s,i)=>s+Number(i.subtotal||0),0));
+  doc.text(`Subtotal`, 125, y); doc.text(`R$ ${money(subtotal)}`, 165, y); y += 7;
+  if (order.coupon_code) {
+    doc.text(`Cupom ${order.coupon_code} (${Number(order.discount_percent||0).toLocaleString('pt-BR',{maximumFractionDigits:2})}%)`, 90, y);
+    doc.text(`- R$ ${money(order.discount_amount)}`, 165, y); y += 7;
+  }
+  doc.setFontSize(13); doc.setFont(undefined, 'bold'); doc.text(`TOTAL: R$ ${money(order.total)}`, 125, y);
+  y += 15; doc.setFontSize(9); doc.setFont(undefined, 'normal');
+  doc.text('Documento gerado automaticamente pelo marketplace e sujeito à revisão administrativa.', 14, y);
+  doc.text('Sem valor fiscal até a conferência e validação da equipe responsável.', 14, y + 6);
+  return doc.output('blob');
+}
+
+async function uploadInvoiceDraft(order, session) {
+  try {
+    const blob = await generateInvoiceDraftPDF(order, session);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error('Usuário não autenticado.');
+    const orderNumber = String(order.id).padStart(6, '0');
+    const path = `${userId}/${order.id}/NF-${orderNumber}.pdf`;
+    const { error: uploadError } = await db.storage.from('invoices').upload(path, blob, {
+      contentType: 'application/pdf',
+      upsert: false,
+    });
+    if (uploadError && !String(uploadError.message || '').toLowerCase().includes('already exists')) throw uploadError;
+
+    const { error: updateError } = await db.from('orders').update({
+      customer_email: session.user.email || null,
+      nf_storage_path: path,
+      nf_file_name: `NF-${orderNumber}.pdf`,
+      nf_status: 'Pendente',
+      updated_at: new Date().toISOString(),
+    }).eq('id', order.id).eq('customer_id', userId);
+    if (updateError) throw updateError;
+    return true;
+  } catch (error) {
+    console.error('Erro ao gerar/anexar NF:', error);
+    showToast('Pedido criado. A NF será disponibilizada para revisão da equipe.', 'error');
+    return false;
   }
 }
 

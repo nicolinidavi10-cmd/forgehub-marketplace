@@ -69,7 +69,7 @@ body:has(#deleteConfirmModal:not(.hidden)) {
 <div class="shortcut-row"><a class="shortcut" href="#pedidos" data-section="pedidos"><span class="sc-icon">□</span><strong>Pedidos feitos</strong><span>Visualize, altere o status e consulte os pedidos reais.</span></a><a data-goto="estoque" class="shortcut" href="#estoque" data-section="estoque"><span class="sc-icon">▤</span><strong>Controle de estoque</strong><span>Ajuste quantidades e registre movimentações.</span></a><a data-goto="financeiro" class="shortcut" href="#financeiro" data-section="financeiro"><span class="sc-icon">↗</span><strong>Financeiro</strong><span>Consulte entradas, despesas e saldo acumulado.</span></a></div>
 </section>
 
-<section id="pedidosSection" class="admin-section panel section-panel"><div class="panel-head"><div><h3>Pedidos feitos</h3><p class="section-note">Cada pedido vem do checkout da loja e altera o estoque automaticamente.</p></div><span id="ordersCountLabel">0 pedidos</span></div><div class="toolbar"><input id="orderSearch" placeholder="Pesquisar pedido ou produto..."><select id="orderStatusFilter"><option value="">Todos os status</option><option>Recebido</option><option>Em separação</option><option>Enviado</option><option>Concluído</option><option>Cancelado</option></select></div><div class="responsive-table"><table class="moves data-table"><thead><tr><th>Pedido</th><th>Data</th><th>Itens</th><th>Status</th><th>Valor</th><th>Ação</th></tr></thead><tbody id="ordersBody"></tbody></table></div></section>
+<section id="pedidosSection" class="admin-section panel section-panel"><div class="panel-head"><div><h3>Pedidos feitos</h3><p class="section-note">Cada pedido vem do checkout da loja e altera o estoque automaticamente.</p></div><span id="ordersCountLabel">0 pedidos</span></div><div class="toolbar"><input id="orderSearch" placeholder="Pesquisar pedido ou produto..."><select id="orderStatusFilter"><option value="">Todos os status</option><option>Recebido</option><option>Em separação</option><option>Enviado</option><option>Concluído</option><option>Cancelado</option></select></div><div class="responsive-table"><table class="moves data-table"><thead><tr><th>Pedido</th><th>Data</th><th>Itens</th><th>Status</th><th>Valor</th><th>Ação</th><th>NF</th></tr></thead><tbody id="ordersBody"></tbody></table></div></section>
 
 <section id="estoqueSection" class="admin-section panel section-panel"><div class="panel-head"><div><h3>Estoque</h3><p class="section-note">O saldo abaixo é a quantidade atual dos produtos cadastrados.</p></div><span id="stockCountLabel">0 unidades</span></div><div class="toolbar"><input id="stockSearch" placeholder="Pesquisar produto..."><button class="primary-btn" id="openProductFromStock">+ Novo produto</button></div><div class="responsive-table"><table class="moves data-table"><thead><tr><th>Produto</th><th>Categoria</th><th>Quantidade</th><th>Preço</th><th>Situação</th><th>Ação</th></tr></thead><tbody id="stockBody"></tbody></table></div></section>
 
@@ -113,9 +113,20 @@ body:has(#deleteConfirmModal:not(.hidden)) {
   </div>
 </div>
 <div class="modal hidden" id="adminModal"><div class="modal-box"><button class="modal-close" data-close>×</button><div id="modalContent"></div></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js"></script>
 <script src="admin.js"></script>
+<div class="invoice-admin-modal hidden" id="invoiceAdminModal" role="dialog" aria-modal="true" aria-labelledby="invoiceAdminTitle">
+  <div class="invoice-admin-backdrop" data-invoice-close></div>
+  <div class="invoice-admin-card">
+    <div class="invoice-admin-head">
+      <div><span class="eyebrow">DOCUMENTO DO PEDIDO</span><h2 id="invoiceAdminTitle">Nota Fiscal</h2><p id="invoiceAdminMeta"></p></div>
+      <button type="button" class="invoice-admin-close" data-invoice-close>×</button>
+    </div>
+    <div id="invoiceAdminBody" class="invoice-admin-body"></div>
+  </div>
+</div>
 <div id="deleteConfirmModal" class="delete-modal hidden" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
     <div class="delete-modal-backdrop" data-delete-cancel></div>
 

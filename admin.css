@@ -480,3 +480,31 @@ table.moves td.val.out{color:var(--out)}
 .coupon-admin-empty{grid-column:1/-1;min-height:180px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;border:1px dashed var(--line);border-radius:15px;color:var(--muted);gap:7px}
 .coupon-admin-empty strong{font:600 15px 'Space Grotesk';color:var(--ink)}
 .coupon-admin-empty span{font-size:11px}
+
+/* ==========================================================
+   NF / DOCUMENTO DO PEDIDO
+   ========================================================== */
+.invoice-admin-modal{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;padding:22px;background:rgba(7,13,18,.62);backdrop-filter:blur(5px)}
+.invoice-admin-modal.hidden{display:none}
+.invoice-admin-backdrop{position:absolute;inset:0}
+.invoice-admin-card{position:relative;width:min(1050px,calc(100vw - 40px));height:min(88vh,850px);background:#fff;border:1px solid #dce3e8;border-radius:22px;box-shadow:0 28px 80px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden}
+.invoice-admin-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #e7ecef;flex:none}
+.invoice-admin-head h2{margin:3px 0 2px;font-size:22px;color:#17212b}
+.invoice-admin-head p{margin:0;color:#71808d;font-size:13px}
+.invoice-admin-close{border:0;background:#f1f4f6;width:36px;height:36px;border-radius:50%;font-size:24px;cursor:pointer;color:#52606d}
+.invoice-admin-body{flex:1;min-height:0;overflow:auto;padding:18px;background:#f5f7f8}
+.invoice-admin-toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
+.invoice-admin-status{font-size:12px;font-weight:800;letter-spacing:.08em;padding:7px 10px;border-radius:999px;background:#fff2d8;color:#986100}
+.invoice-admin-status.approved{background:#e4f6e8;color:#26723a}.invoice-admin-status.sent{background:#e5f0ff;color:#245d9f}
+.invoice-admin-preview{width:100%;height:58vh;min-height:430px;border:1px solid #d6dee4;border-radius:14px;background:#fff;box-shadow:0 8px 25px rgba(20,40,60,.06)}
+.invoice-admin-empty{padding:55px 25px;text-align:center;background:#fff;border:1px dashed #cbd5dc;border-radius:16px;color:#71808d}
+.invoice-admin-empty strong{display:block;color:#263541;font-size:17px;margin-bottom:6px}
+.invoice-admin-actions{display:flex;gap:9px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px}
+.invoice-admin-file{display:none}
+.invoice-admin-note{font-size:12px;color:#7a8791;margin:10px 0 0}
+.invoice-admin-recipient{background:#fff;border:1px solid #dfe5e9;border-radius:13px;padding:12px;margin-bottom:12px;font-size:13px}
+.invoice-admin-recipient strong{display:block;color:#263541;margin-bottom:3px}
+.nf-action-stack{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.nf-status-mini{display:inline-flex;align-items:center;padding:4px 7px;border-radius:999px;font-size:10px;font-weight:800;background:#fff2d8;color:#986100;margin-right:4px}
+.nf-status-mini.approved{background:#e4f6e8;color:#26723a}.nf-status-mini.sent{background:#e5f0ff;color:#245d9f}
+@media(max-width:800px){.invoice-admin-card{width:calc(100vw - 20px);height:92vh}.invoice-admin-preview{min-height:380px}.invoice-admin-body{padding:12px}}

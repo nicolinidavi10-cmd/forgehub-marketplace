@@ -149,12 +149,18 @@ function renderDonut() {
   $('#stockLegend').innerHTML = entries.map(([label, value], index) => `<li><span class="name"><i style="background:${colors[index%colors.length]}"></i>${escapeHtml(label)}</span><b>${Math.round(value/total*100)}%</b></li>`).join('') || '<li>Nenhum produto cadastrado</li>';
 }
 
+function invoiceStatusLabel(order) {
+  const status = order.nf_status || 'Pendente';
+  const cls = status === 'Enviada' ? 'sent' : status === 'Aprovada' ? 'approved' : '';
+  return `<span class="nf-status-mini ${cls}">${escapeHtml(status)}</span>`;
+}
+
 function renderOrders() {
   const q = ($('#orderSearch').value || '').toLowerCase();
   const filter = $('#orderStatusFilter').value;
   const list = adminOrders.filter(order => {
     if (filter && order.status !== filter) return false;
-    const haystack = `${order.id} ${order.customer?.full_name || ''} ${(order.order_items || []).map(i => i.product_name).join(' ')}`.toLowerCase();
+    const haystack = `${order.id} ${order.customer?.full_name || ''} ${order.customer_email || ''} ${(order.order_items || []).map(i => i.product_name).join(' ')}`.toLowerCase();
     return !q || haystack.includes(q);
   });
   $('#ordersBody').innerHTML = list.map(order => `
@@ -169,9 +175,97 @@ function renderOrders() {
       </td>
       <td class="val in">${brl(order.total)}</td>
       <td><button class="icon-btn delete-order" data-id="${order.id}">Excluir</button></td>
+      <td><div class="nf-action-stack">${invoiceStatusLabel(order)}<button class="icon-btn invoice-view" data-invoice-view="${order.id}">Visualizar</button>${order.nf_status === 'Aprovada' || order.nf_status === 'Enviada' ? `<button class="icon-btn invoice-send" data-invoice-send="${order.id}">Enviar</button>` : ''}</div></td>
     </tr>
-  `).join('') || '<tr><td colspan="6">Nenhum pedido encontrado.</td></tr>';
+  `).join('') || '<tr><td colspan="7">Nenhum pedido encontrado.</td></tr>';
 }
+
+function closeInvoiceModal() {
+  $('#invoiceAdminModal')?.classList.add('hidden');
+}
+
+function invoiceDraftPdf(order) {
+  if (!window.jspdf?.jsPDF) throw new Error('Biblioteca de PDF não carregada.');
+  const doc = new window.jspdf.jsPDF();
+  const orderNumber = String(order.id).padStart(6, '0');
+  const customerName = order.customer?.full_name || 'Cliente';
+  let y = 18;
+  doc.setFontSize(18); doc.setFont(undefined,'bold'); doc.text('BRENNTAG',14,y);
+  doc.setFontSize(9); doc.setFont(undefined,'normal'); doc.text('INDUSTRIAL MARKETPLACE',14,y+6);
+  doc.setFontSize(15); doc.setFont(undefined,'bold'); doc.text('DOCUMENTO DE VENDA / NF',14,y+20);
+  doc.setFontSize(9); doc.setFont(undefined,'normal'); doc.text('RASCUNHO — PENDENTE DE REVISÃO ADMINISTRATIVA',14,y+27); y+=42;
+  doc.setDrawColor(160); doc.rect(14,y-5,182,28); doc.setFont(undefined,'bold'); doc.text(`Pedido #${orderNumber}`,18,y+3);
+  doc.setFont(undefined,'normal'); doc.text(`Emissão: ${new Date(order.created_at).toLocaleString('pt-BR')}`,18,y+10); doc.text(`Pagamento: Pix — Simulado`,18,y+17);
+  doc.text(`Cliente: ${customerName}`,105,y+10); doc.text(`E-mail: ${order.customer_email || 'não informado'}`,105,y+17); y+=36;
+  doc.setFont(undefined,'bold'); doc.text('DESTINATÁRIO',14,y); doc.setFont(undefined,'normal'); doc.text(`Nome: ${customerName}`,14,y+7); doc.text(`E-mail: ${order.customer_email || 'não informado'}`,14,y+14); y+=25;
+  doc.setFont(undefined,'bold'); doc.text('ITENS DA VENDA',14,y); y+=7; doc.line(14,y,196,y); y+=7;
+  doc.text('Produto',14,y); doc.text('Qtd.',130,y); doc.text('Valor',165,y); y+=6; doc.setFont(undefined,'normal');
+  (order.order_items||[]).forEach(item=>{doc.text(String(item.product_name||'').slice(0,58),14,y);doc.text(String(item.quantity||0),132,y);doc.text(`R$ ${brl(item.subtotal).replace('R$ ','')}`,165,y);y+=7;if(y>260){doc.addPage();y=20;}});
+  doc.line(14,y+2,196,y+2);y+=12;const subtotal=Number(order.subtotal??(order.order_items||[]).reduce((s,i)=>s+Number(i.subtotal||0),0));doc.text('Subtotal',125,y);doc.text(`R$ ${brl(subtotal).replace('R$ ','')}`,165,y);y+=7;
+  if(order.coupon_code){doc.text(`Cupom ${order.coupon_code} (${Number(order.discount_percent||0).toLocaleString('pt-BR',{maximumFractionDigits:2})}%)`,90,y);doc.text(`- R$ ${brl(order.discount_amount).replace('R$ ','')}`,165,y);y+=7;}
+  doc.setFontSize(13);doc.setFont(undefined,'bold');doc.text(`TOTAL: R$ ${brl(order.total).replace('R$ ','')}`,125,y);y+=15;doc.setFontSize(9);doc.setFont(undefined,'normal');doc.text('Documento gerado automaticamente e sujeito à revisão administrativa.',14,y);doc.text('Sem valor fiscal até a conferência e validação da equipe responsável.',14,y+6);
+  return doc.output('blob');
+}
+
+async function uploadAdminInvoiceFile(order, file, filename) {
+  if (!file) throw new Error('Selecione um PDF.');
+  if (file.type !== 'application/pdf') throw new Error('A NF precisa estar em formato PDF.');
+  if (file.size > 10 * 1024 * 1024) throw new Error('O PDF deve ter no máximo 10 MB.');
+  const path = `${order.customer_id}/${order.id}/${filename || `NF-${String(order.id).padStart(6,'0')}.pdf`}`;
+  const { error: uploadError } = await db.storage.from('invoices').upload(path, file, { contentType:'application/pdf', upsert:true });
+  if (uploadError) throw uploadError;
+  const { error: updateError } = await db.from('orders').update({ nf_storage_path:path, nf_file_name:filename || `NF-${String(order.id).padStart(6,'0')}.pdf`, nf_status:'Pendente', nf_reviewed_at:null, nf_sent_at:null, updated_at:new Date().toISOString() }).eq('id',order.id);
+  if (updateError) throw updateError;
+  return path;
+}
+
+async function generateAdminInvoice(order) {
+  const blob = invoiceDraftPdf(order);
+  const file = new File([blob], `NF-${String(order.id).padStart(6,'0')}.pdf`, {type:'application/pdf'});
+  return uploadAdminInvoiceFile(order, file, file.name);
+}
+
+async function getInvoiceUrl(path) {
+  if (!path) return null;
+  const { data, error } = await db.storage.from('invoices').createSignedUrl(path, 600);
+  if (error) throw error;
+  return data?.signedUrl || null;
+}
+
+async function openInvoiceReview(orderId) {
+  let order = adminOrders.find(o=>String(o.id)===String(orderId));
+  if (!order) return;
+  $('#invoiceAdminTitle').textContent = `NF do pedido #${String(order.id).padStart(6,'0')}`;
+  $('#invoiceAdminMeta').textContent = `${order.customer?.full_name || 'Cliente'} · ${order.customer_email || 'E-mail não informado'}`;
+  $('#invoiceAdminModal').classList.remove('hidden');
+  const body = $('#invoiceAdminBody');
+  body.innerHTML = '<div class="invoice-admin-empty"><strong>Carregando documento...</strong><span>Um instante.</span></div>';
+  try {
+    if (!order.nf_storage_path) {
+      body.innerHTML = `<div class="invoice-admin-empty"><strong>Nenhuma NF foi anexada ainda.</strong><span>O sistema pode gerar um documento preliminar ou você pode anexar o PDF correto.</span><div class="invoice-admin-actions"><button class="primary-btn" id="generateInvoiceAdmin">Gerar documento preliminar</button><label class="secondary-btn">Adicionar PDF<input id="invoiceFileInput" class="invoice-admin-file" type="file" accept="application/pdf"></label></div><p class="invoice-admin-note">O documento preliminar é apenas para revisão e não possui valor fiscal.</p></div>`;
+      $('#generateInvoiceAdmin').onclick=async()=>{showPageLoader('Gerando NF...');try{await generateAdminInvoice(order);await refreshAdmin();closeInvoiceModal();await openInvoiceReview(order.id);showAdminMessage('Documento preliminar gerado. Revise antes de aprovar.','success');}catch(e){showAdminMessage(e.message||'Não foi possível gerar o documento.','error');}finally{hidePageLoader();}};
+      $('#invoiceFileInput').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;showPageLoader('Anexando PDF...');try{await uploadAdminInvoiceFile(order,file,file.name);await refreshAdmin();closeInvoiceModal();await openInvoiceReview(order.id);showAdminMessage('PDF anexado. Revise antes de aprovar.','success');}catch(err){showAdminMessage(err.message||'Não foi possível anexar o PDF.','error');}finally{hidePageLoader();}};
+      return;
+    }
+    const url=await getInvoiceUrl(order.nf_storage_path);
+    body.innerHTML=`<div class="invoice-admin-toolbar"><span class="invoice-admin-status ${order.nf_status==='Aprovada'?'approved':order.nf_status==='Enviada'?'sent':''}">${escapeHtml(order.nf_status||'Pendente')}</span><div class="invoice-admin-actions"><a class="secondary-btn" href="${url}" target="_blank" rel="noopener">Baixar / abrir PDF</a><label class="secondary-btn">Substituir PDF<input id="invoiceFileInput" class="invoice-admin-file" type="file" accept="application/pdf"></label></div></div><div class="invoice-admin-recipient"><strong>Destinatário</strong>${escapeHtml(order.customer?.full_name||'Cliente')} · ${escapeHtml(order.customer_email||'E-mail não informado')}</div><iframe class="invoice-admin-preview" src="${url}#toolbar=1&navpanes=0"></iframe><p class="invoice-admin-note">Confira os dados, valores e descontos. Se estiver tudo certo, clique em OK para aprovar a NF.</p><div class="invoice-admin-actions"><button class="secondary-btn" id="invoiceApproveBtn">OK — Aprovar NF</button>${order.nf_status==='Aprovada'||order.nf_status==='Enviada'?`<button class="primary-btn" id="invoiceSendBtn">Enviar NF por e-mail</button>`:''}</div>`;
+    $('#invoiceFileInput').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;showPageLoader('Substituindo PDF...');try{await uploadAdminInvoiceFile(order,file,file.name);await refreshAdmin();closeInvoiceModal();await openInvoiceReview(order.id);showAdminMessage('PDF substituído. A NF voltou para revisão.','success');}catch(err){showAdminMessage(err.message||'Não foi possível substituir o PDF.','error');}finally{hidePageLoader();}};
+    $('#invoiceApproveBtn').onclick=async()=>{showPageLoader('Aprovando NF...');try{const {error}=await db.rpc('admin_review_invoice',{p_order_id:order.id,p_status:'Aprovada'});if(error)throw error;await refreshAdmin();closeInvoiceModal();showAdminMessage('NF aprovada. Agora ela pode ser enviada ao cliente.','success');}catch(e){showAdminMessage(e.message||'Não foi possível aprovar a NF.','error');}finally{hidePageLoader();}};
+    $('#invoiceSendBtn')?.addEventListener('click',()=>openInvoiceSend(order.id));
+  } catch(e) {
+    body.innerHTML=`<div class="invoice-admin-empty"><strong>Não foi possível abrir a NF.</strong><span>${escapeHtml(e.message||'Erro desconhecido.')}</span></div>`;
+  }
+}
+
+function openInvoiceSend(orderId) {
+  const order=adminOrders.find(o=>String(o.id)===String(orderId)); if(!order)return;
+  const number=String(order.id).padStart(6,'0');
+  const subject=`Nota Fiscal referente ao pedido #${number}`;
+  const message=`Olá, ${order.customer?.full_name||'cliente'}!\n\nSegue em anexo a Nota Fiscal referente à sua compra realizada na BrenntagHub.\n\nAgradecemos pela preferência e permanecemos à disposição para qualquer dúvida.\n\nAtenciosamente,\nEquipe BrenntagHub`;
+  openModal(`<h2>Enviar NF por e-mail</h2><p class="section-note">A NF é enviada separadamente do pedido. O pedido não será alterado.</p><form id="invoiceSendForm" class="form-grid"><label class="full">Destinatário<input value="${escapeHtml(order.customer_email||'')}" readonly></label><label class="full">Assunto<input name="subject" required value="${escapeHtml(subject)}"></label><label class="full">Mensagem<textarea name="message" rows="8" required>${escapeHtml(message)}</textarea></label><p class="section-note full">Anexo: ${escapeHtml(order.nf_file_name||`NF-${number}.pdf`)}</p><button class="primary-btn full" type="submit">Enviar NF</button></form>`);
+  $('#invoiceSendForm').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);if(!confirm(`Enviar a NF do pedido #${number} para ${order.customer_email||'o cliente'}?`))return;showPageLoader('Enviando NF por e-mail...');try{const {data,error}=await db.functions.invoke('send-invoice-email',{body:{order_id:order.id,subject:String(fd.get('subject')||''),message:String(fd.get('message')||'')}});if(error)throw error;if(data?.error)throw new Error(data.error);closeModal();await refreshAdmin();showAdminMessage(`NF enviada para ${order.customer_email}.`,'success');}catch(err){showAdminMessage(err.message||'Não foi possível enviar a NF.','error');}finally{hidePageLoader();}};
+}
+
 
 function renderStock() {
   const q = ($('#stockSearch').value || '').toLowerCase();
@@ -609,6 +703,7 @@ $('#supportSearch').oninput = renderSupport;
 $('#supportStatusFilter').onchange = renderSupport;
 
 $('#supportAdminModal')?.addEventListener('click', event => { if(event.target.matches('[data-support-modal-close]')) closeSupportModal(); });
+$('#invoiceAdminModal')?.addEventListener('click', event => { if(event.target.matches('[data-invoice-close]')) closeInvoiceModal(); });
 document.addEventListener('keydown', event => { if(event.key === 'Escape' && !$('#supportAdminModal')?.classList.contains('hidden')) closeSupportModal(); });
 
 document.addEventListener('click', async event => {
@@ -620,6 +715,8 @@ document.addEventListener('click', async event => {
   if (target.classList.contains('activate-product')) return setProductActive(Number(id), true);
   if (target.classList.contains('save-stock')) return saveStock(Number(id));
   if (target.classList.contains('delete-order')) return deleteOrder(Number(id));
+  if (target.classList.contains('invoice-view')) return openInvoiceReview(Number(target.dataset.invoiceView));
+  if (target.classList.contains('invoice-send')) return openInvoiceSend(Number(target.dataset.invoiceSend));
   if (target.classList.contains('delete-expense')) return deleteExpense(Number(id));
   if (target.dataset.couponEdit) return openCouponForm(adminCoupons.find(c=>String(c.id)===String(target.dataset.couponEdit)));
   if (target.dataset.couponDelete) return deleteCoupon(Number(target.dataset.couponDelete));
