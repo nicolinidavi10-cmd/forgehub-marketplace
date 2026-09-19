@@ -54,6 +54,7 @@ body:has(#deleteConfirmModal:not(.hidden)) {
 <li><a data-goto="estoque" href="#estoque" data-section="estoque"><span class="ic">▤</span> Estoque</a></li>
 <li><a href="#produtos" data-section="produtos"><span class="ic">◈</span> Gestão de produtos</a></li>
 <li><a data-goto="financeiro" href="#financeiro" data-section="financeiro"><span class="ic">↗</span> Financeiro</a></li>
+<li><a href="#cupons" data-section="cupons"><span class="ic">%</span> Cupons de desconto</a></li>
 <li><a href="#atendimentos" data-section="atendimentos"><span class="ic">◌</span> Atendimentos</a></li>
 </ul><div class="sidebar-foot"><a href="index.html">← Voltar à loja</a><a href="#" id="logoutButton">↪ Sair do painel</a><div class="status-pill"><span class="status-dot"></span> Sistema protegido</div></div></aside>
 <main class="admin-main">
@@ -75,6 +76,14 @@ body:has(#deleteConfirmModal:not(.hidden)) {
 <section id="produtosSection" class="admin-section panel section-panel"><div class="panel-head"><div><h3>Gestão de produtos</h3><p class="section-note">Cadastre, edite ou remova produtos. A loja usa exatamente estes dados.</p></div><button class="primary-btn" id="openProduct">+ Cadastrar produto</button></div><div class="product-admin-grid" id="productCards"></div></section>
 
 <section id="financeiroSection" class="admin-section panel section-panel"><div class="panel-head"><div><h3>Financeiro</h3><p class="section-note">Entradas são pedidos finalizados; saídas são despesas registradas aqui.</p></div><button class="primary-btn" id="openExpense">+ Registrar despesa</button></div><div class="finance-summary"><div><span>Entradas</span><b id="financeIncome">R$ 0,00</b></div><div><span>Saídas</span><b id="financeExpense">R$ 0,00</b></div><div><span>Saldo</span><b id="financeBalance">R$ 0,00</b></div></div><div class="responsive-table"><table class="moves data-table"><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Valor</th><th>Ação</th></tr></thead><tbody id="financeBody"></tbody></table></div></section>
+
+<section id="cuponsSection" class="admin-section panel section-panel">
+  <div class="panel-head">
+    <div><h3>Cupons de desconto</h3><p class="section-note">Crie descontos para negociações comerciais e ofereça códigos personalizados aos clientes.</p></div>
+    <button class="primary-btn" id="openCoupon">+ Criar cupom</button>
+  </div>
+  <div class="coupon-admin-grid" id="couponAdminGrid"></div>
+</section>
 
 <section id="atendimentosSection" class="admin-section panel section-panel">
   <div class="panel-head"><div><h3>Atendimentos</h3><p class="section-note">Acompanhe os clientes em tempo real e responda às conversas comerciais.</p></div><span id="supportCountLabel">0 atendimentos</span></div>

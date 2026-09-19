@@ -3,6 +3,7 @@ let products = [];
 let cart = [];
 let buyerOrders = [];
 let currentTerms = null;
+let currentCoupon = null;
 
 const grid = document.querySelector('#productGrid');
 const filters = document.querySelector('#filters');
@@ -357,6 +358,8 @@ async function openCheckout() {
 
   const detail = document.querySelector('#cartDetail');
   const version = currentTerms?.version;
+  currentCoupon = null;
+  const subtotal = cartTotal();
 
   detail.innerHTML = `
     <p class="eyebrow">FINALIZAÇÃO</p>
@@ -367,7 +370,19 @@ async function openCheckout() {
         return `<div><span>${item.quantity}x ${p.name}</span><strong>R$ ${money(p.price * item.quantity)}</strong></div>`;
       }).join('')}
     </div>
-    <div class="cart-summary"><span>Total</span><strong>R$ ${money(cartTotal())}</strong></div>
+    <div class="coupon-box">
+      <div class="coupon-box-head"><strong>Tem um cupom de desconto?</strong><span>Opcional</span></div>
+      <div class="coupon-row">
+        <input id="couponInput" type="text" maxlength="40" autocomplete="off" placeholder="Digite seu cupom">
+        <button type="button" class="coupon-apply" id="applyCoupon">Aplicar</button>
+      </div>
+      <div class="coupon-feedback" id="couponFeedback"></div>
+    </div>
+    <div class="cart-summary checkout-prices">
+      <span>Subtotal</span><strong id="checkoutSubtotal">R$ ${money(subtotal)}</strong>
+      <span class="discount-line hidden" id="checkoutDiscountLabel">Desconto</span><strong class="discount-line hidden" id="checkoutDiscount">- R$ 0,00</strong>
+      <span>Total</span><strong id="checkoutTotal">R$ ${money(subtotal)}</strong>
+    </div>
     <div class="terms-box">
       <div class="terms-box-head">
         <strong>${currentTerms?.title || 'Termos de compra'}</strong>
@@ -384,7 +399,59 @@ async function openCheckout() {
   `;
 
   detail.querySelector('#readTerms')?.addEventListener('click', showTermsModal);
+  detail.querySelector('#applyCoupon')?.addEventListener('click', applyCheckoutCoupon);
+  detail.querySelector('#couponInput')?.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); applyCheckoutCoupon(); }
+  });
   detail.querySelector('#confirmOrder')?.addEventListener('click', createOrderFromCart);
+}
+
+async function applyCheckoutCoupon() {
+  const input = document.querySelector('#couponInput');
+  const button = document.querySelector('#applyCoupon');
+  const feedback = document.querySelector('#couponFeedback');
+  const code = input?.value.trim().toUpperCase();
+  if (!code) {
+    currentCoupon = null;
+    feedback.textContent = 'Digite um cupom para aplicar.';
+    feedback.className = 'coupon-feedback error';
+    return;
+  }
+  button.disabled = true;
+  input.disabled = true;
+  feedback.textContent = 'Validando cupom...';
+  feedback.className = 'coupon-feedback';
+  try {
+    const { data, error } = await db.rpc('preview_discount_coupon', {
+      p_code: code,
+      p_subtotal: cartTotal()
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw new Error('Cupom inválido.');
+    currentCoupon = {
+      code: row.code,
+      percent: Number(row.discount_percent),
+      discount: Number(row.discount_amount),
+      total: Number(row.total)
+    };
+    document.querySelector('#checkoutDiscountLabel')?.classList.remove('hidden');
+    document.querySelector('#checkoutDiscount')?.classList.remove('hidden');
+    document.querySelector('#checkoutDiscount').textContent = `- R$ ${money(currentCoupon.discount)}`;
+    document.querySelector('#checkoutTotal').textContent = `R$ ${money(currentCoupon.total)}`;
+    feedback.textContent = `Cupom ${currentCoupon.code} aplicado: ${currentCoupon.percent}% de desconto.`;
+    feedback.className = 'coupon-feedback success';
+  } catch (error) {
+    currentCoupon = null;
+    document.querySelector('#checkoutDiscountLabel')?.classList.add('hidden');
+    document.querySelector('#checkoutDiscount')?.classList.add('hidden');
+    document.querySelector('#checkoutTotal').textContent = `R$ ${money(cartTotal())}`;
+    feedback.textContent = error.message || 'Não foi possível aplicar o cupom.';
+    feedback.className = 'coupon-feedback error';
+  } finally {
+    button.disabled = false;
+    input.disabled = false;
+  }
 }
 
 function showTermsModal() {
@@ -428,6 +495,17 @@ async function createOrderFromCart() {
     });
 
     if (error) throw error;
+
+    if (currentCoupon?.code) {
+      const { error: couponError } = await db.rpc('apply_discount_coupon', {
+        p_order_id: orderId,
+        p_code: currentCoupon.code
+      });
+      if (couponError) {
+        await db.rpc('cancel_order', { p_order_id: orderId });
+        throw couponError;
+      }
+    }
 
     const { data: order, error: orderError } = await db
       .from('orders')
@@ -511,7 +589,7 @@ async function renderBuyerOrders() {
             <strong>#${orderNumber}</strong>
             <small>${new Date(order.created_at).toLocaleDateString('pt-BR')} · ${new Date(order.created_at).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</small>
           </div>
-          <div class="buyer-order-total"><span>Total</span><strong>R$ ${money(order.total)}</strong></div>
+          <div class="buyer-order-total"><span>Total</span><strong>R$ ${money(order.total)}</strong>${order.coupon_code ? `<small class="buyer-order-coupon">Cupom ${escapeHtml(order.coupon_code)} · -${Number(order.discount_percent||0).toLocaleString('pt-BR',{maximumFractionDigits:2})}%</small>` : ''}</div>
         </div>
         <div class="buyer-order-item">${itemsText}</div>
         ${canceled ? `
@@ -574,6 +652,7 @@ function showReceipt(order) {
     <div class="receipt-items">
       ${items.map(item => `<div class="receipt-item"><span>${item.quantity}x ${item.product_name}</span><strong>R$ ${money(item.subtotal)}</strong></div>`).join('')}
     </div>
+    ${order.coupon_code ? `<div class="receipt-coupon"><span>Cupom ${escapeHtml(order.coupon_code)} (${Number(order.discount_percent||0).toLocaleString('pt-BR',{maximumFractionDigits:2})}%)</span><strong>- R$ ${money(order.discount_amount)}</strong></div>` : ''}
     <div class="receipt-total"><span>Total</span><strong>R$ ${money(order.total)}</strong></div>
     <div class="pix-box"><div class="pix-title"><span class="pix-symbol">◆</span><strong>Pagamento via Pix</strong></div><p>Este pedido utiliza uma simulação de pagamento para fins demonstrativos do marketplace.</p><div class="pix-code">PAGAMENTO-SIMULADO-${orderNumber}</div></div>
     <div class="receipt-actions">

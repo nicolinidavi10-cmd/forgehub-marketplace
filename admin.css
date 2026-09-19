@@ -459,3 +459,24 @@ table.moves td.val.out{color:var(--out)}
 .support-admin-chat{min-height:0}.support-admin-messages{min-height:0}.support-admin-finish{border:0;border-radius:9px;padding:0 14px;background:#111820;color:#fff;font:600 11px 'DM Sans';cursor:pointer;white-space:nowrap}.support-admin-finish:hover{background:#27323b}.support-admin-finish:disabled{opacity:.55;cursor:wait}
 
 .support-admin-delete{border:0;border-radius:9px;padding:10px 13px;background:#f2e8e8;color:#8b2f2f;font:600 11px 'DM Sans';cursor:pointer;white-space:nowrap}.support-admin-delete:hover{background:#eadada}.support-admin-delete:disabled{opacity:.55;cursor:wait}
+
+
+/* Gestão de cupons */
+.coupon-admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-top:16px}
+.coupon-admin-card{border:1px solid var(--line);border-radius:15px;padding:18px;background:#fff;box-shadow:0 8px 24px #11182008}
+.coupon-admin-card.inactive{opacity:.65;background:#f8f9f8}
+.coupon-admin-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.coupon-admin-top>strong{font:700 24px 'Space Grotesk';color:#2d7954}
+.coupon-admin-card.inactive .coupon-admin-top>strong{color:#7b8580}
+.coupon-admin-code{display:block;font:700 16px 'Space Grotesk';letter-spacing:.8px;color:var(--ink)}
+.coupon-admin-status{display:inline-block;margin-top:6px;font-size:8px;font-weight:800;letter-spacing:1px;padding:4px 7px;border-radius:999px;background:#e7f4ec;color:#2d7954}
+.coupon-admin-card.inactive .coupon-admin-status{background:#eef0ef;color:#747d79}
+.coupon-admin-meta{display:flex;justify-content:space-between;gap:10px;margin:18px 0 14px;padding-top:12px;border-top:1px solid var(--line);font-size:10px;color:var(--muted)}
+.coupon-admin-actions{display:flex;gap:7px;flex-wrap:wrap}
+.coupon-admin-actions button{cursor:pointer}
+.coupon-admin-actions .secondary-btn,.coupon-admin-actions .danger-btn{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff;font:600 10px 'DM Sans'}
+.coupon-admin-actions .danger-btn{color:#9a3d3d;background:#fff7f7;border-color:#efdede}
+.coupon-admin-check{display:flex;align-items:center;gap:8px}
+.coupon-admin-empty{grid-column:1/-1;min-height:180px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;border:1px dashed var(--line);border-radius:15px;color:var(--muted);gap:7px}
+.coupon-admin-empty strong{font:600 15px 'Space Grotesk';color:var(--ink)}
+.coupon-admin-empty span{font-size:11px}

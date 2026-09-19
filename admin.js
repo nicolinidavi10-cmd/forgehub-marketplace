@@ -9,6 +9,7 @@ let adminExpenses = [];
 let currentTerms = null;
 let activeProductImagePath = null;
 let adminSupport = [];
+let adminCoupons = [];
 let selectedSupportId = null;
 let supportChannel = null;
 let ordersChannel = null;
@@ -67,23 +68,26 @@ async function requireAdmin() {
 }
 
 async function loadAdminData() {
-  const [productResult, orderResult, expenseResult, termsResult, supportResult] = await Promise.all([
+  const [productResult, orderResult, expenseResult, termsResult, supportResult, couponResult] = await Promise.all([
     db.from('products').select('*').order('id', { ascending: true }),
     db.from('orders').select('*, order_items(*), customer:profiles!orders_customer_id_fkey(id,full_name)').order('created_at', { ascending: false }),
     db.from('expenses').select('*').order('created_at', { ascending: false }),
     db.from('purchase_terms').select('*').eq('active', true).order('version', { ascending: false }).limit(1).maybeSingle(),
-    db.from('support_attendances').select('*').order('last_message_at', { ascending: false })
+    db.from('support_attendances').select('*').order('last_message_at', { ascending: false }),
+    db.from('discount_coupons').select('*').order('created_at', { ascending: false })
   ]);
   if (productResult.error) throw productResult.error;
   if (orderResult.error) throw orderResult.error;
   if (expenseResult.error) throw expenseResult.error;
   if (termsResult.error) throw termsResult.error;
   if (supportResult.error) throw supportResult.error;
+  if (couponResult.error) throw couponResult.error;
   adminProducts = productResult.data || [];
   adminOrders = orderResult.data || [];
   adminExpenses = expenseResult.data || [];
   currentTerms = termsResult.data || null;
   adminSupport = supportResult.data || [];
+  adminCoupons = couponResult.data || [];
 }
 
 function dataSummary() {
@@ -557,9 +561,16 @@ async function selectSupport(id){
   await renderSupportChat();
 }
 
+
+function couponDateTimeLocal(value){if(!value)return '';const d=new Date(value);if(Number.isNaN(d.getTime()))return '';const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;}
+function renderCoupons(){const box=$('#couponAdminGrid');if(!box)return;if(!adminCoupons.length){box.innerHTML=`<div class="coupon-admin-empty"><strong>Nenhum cupom cadastrado.</strong><span>Crie um cupom para oferecer desconto durante uma negociação.</span></div>`;return;}box.innerHTML=adminCoupons.map(c=>{const expired=c.expires_at&&new Date(c.expires_at)<new Date();const exhausted=c.max_uses!=null&&Number(c.uses_count||0)>=Number(c.max_uses);const active=c.active&&!expired&&!exhausted;const validity=c.expires_at?`Válido até ${new Date(c.expires_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}`:'Sem data de expiração';const uses=c.max_uses==null?`${c.uses_count||0} usos`:`${c.uses_count||0}/${c.max_uses} usos`;return `<article class="coupon-admin-card ${active?'':'inactive'}"><div class="coupon-admin-top"><div><span class="coupon-admin-code">${escapeHtml(c.code)}</span><span class="coupon-admin-status">${active?'ATIVO':'INATIVO'}</span></div><strong>${Number(c.discount_percent).toLocaleString('pt-BR',{maximumFractionDigits:2})}%</strong></div><div class="coupon-admin-meta"><span>${validity}</span><span>${uses}</span></div><div class="coupon-admin-actions"><button type="button" class="secondary-btn" data-coupon-edit="${c.id}">Editar</button><button type="button" class="secondary-btn" data-coupon-toggle="${c.id}">${c.active?'Desativar':'Ativar'}</button><button type="button" class="danger-btn" data-coupon-delete="${c.id}">Excluir</button></div></article>`;}).join('');}
+function openCouponForm(coupon=null){const isEdit=!!coupon;openModal(`<h2>${isEdit?'Editar cupom':'Criar cupom'}</h2><p class="section-note">Use códigos simples para negociações, por exemplo NEGOCIA10.</p><form id="couponForm" class="form-grid"><label>Código<input name="code" maxlength="40" required value="${escapeHtml(coupon?.code||'')}"></label><label>Desconto (%)<input name="discount" type="number" min="0.01" max="100" step="0.01" required value="${coupon?.discount_percent??''}"></label><label>Validade (opcional)<input name="expires" type="datetime-local" value="${couponDateTimeLocal(coupon?.expires_at)}"></label><label>Limite de usos (opcional)<input name="maxUses" type="number" min="1" step="1" value="${coupon?.max_uses??''}"></label><label class="full coupon-admin-check"><input name="active" type="checkbox" ${coupon?.active!==false?'checked':''}> Cupom ativo</label><button class="primary-btn full" type="submit">${isEdit?'Salvar alterações':'Criar cupom'}</button></form>`);$('#couponForm [name="code"]').addEventListener('input',e=>e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g,''));$('#couponForm').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);const expires=fd.get('expires'),maxUses=fd.get('maxUses');showPageLoader(isEdit?'Salvando cupom...':'Criando cupom...');try{const {error}=await db.rpc('admin_save_discount_coupon',{p_id:isEdit?coupon.id:null,p_code:String(fd.get('code')||'').trim().toUpperCase(),p_discount_percent:Number(fd.get('discount')),p_expires_at:expires?new Date(expires).toISOString():null,p_max_uses:maxUses?Number(maxUses):null,p_active:fd.get('active')==='on'});if(error)throw error;await refreshAdmin();closeModal();showAdminMessage(isEdit?'Cupom atualizado.':'Cupom criado.','success');}catch(err){showAdminMessage(err.message||'Não foi possível salvar o cupom.','error');}finally{hidePageLoader();}};}
+async function deleteCoupon(id){if(!confirm('Excluir este cupom? Essa ação não poderá ser desfeita.'))return;showPageLoader('Excluindo cupom...');try{const {error}=await db.rpc('admin_delete_discount_coupon',{p_id:id});if(error)throw error;await refreshAdmin();showAdminMessage('Cupom excluído.','success');}catch(err){showAdminMessage(err.message||'Não foi possível excluir o cupom.','error');}finally{hidePageLoader();}}
+async function toggleCoupon(id){const c=adminCoupons.find(x=>String(x.id)===String(id));if(!c)return;showPageLoader(c.active?'Desativando cupom...':'Ativando cupom...');try{const {error}=await db.rpc('admin_save_discount_coupon',{p_id:c.id,p_code:c.code,p_discount_percent:Number(c.discount_percent),p_expires_at:c.expires_at,p_max_uses:c.max_uses,p_active:!c.active});if(error)throw error;await refreshAdmin();showAdminMessage(c.active?'Cupom desativado.':'Cupom ativado.','success');}catch(err){showAdminMessage(err.message||'Não foi possível alterar o cupom.','error');}finally{hidePageLoader();}}
+
 async function refreshAdmin() {
   await loadAdminData();
-  renderDashboard(); renderOrders(); renderStock(); renderProducts(); renderFinance(); termsSection(); renderSupport();
+  renderDashboard(); renderOrders(); renderStock(); renderProducts(); renderFinance(); termsSection(); renderSupport(); renderCoupons();
   $('#lastUpdate').textContent = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 }
 
@@ -590,6 +601,7 @@ $('#openProduct').onclick = () => productForm();
 $('#openProductFromStock').onclick = () => productForm();
 $('#openExpense').onclick = () => expenseForm();
 $('#openTerms').onclick = () => termsForm();
+$('#openCoupon').onclick = () => openCouponForm();
 $('#orderSearch').oninput = renderOrders;
 $('#orderStatusFilter').onchange = renderOrders;
 $('#stockSearch').oninput = renderStock;
@@ -609,6 +621,9 @@ document.addEventListener('click', async event => {
   if (target.classList.contains('save-stock')) return saveStock(Number(id));
   if (target.classList.contains('delete-order')) return deleteOrder(Number(id));
   if (target.classList.contains('delete-expense')) return deleteExpense(Number(id));
+  if (target.dataset.couponEdit) return openCouponForm(adminCoupons.find(c=>String(c.id)===String(target.dataset.couponEdit)));
+  if (target.dataset.couponDelete) return deleteCoupon(Number(target.dataset.couponDelete));
+  if (target.dataset.couponToggle) return toggleCoupon(Number(target.dataset.couponToggle));
 });
 
 document.addEventListener('change', event => {

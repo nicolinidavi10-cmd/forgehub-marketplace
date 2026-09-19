@@ -395,3 +395,26 @@ body{overflow-x:hidden;}
 .support-send:disabled{opacity:.55;cursor:wait;transform:none!important}.support-input:disabled{opacity:.7;cursor:wait}
 
 .support-chat-head-actions{display:flex;align-items:center;flex:none}.support-footer-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}.support-footer-actions .support-note{margin:0;flex:1}.support-finish{border:0;border-radius:9px;background:#111820;color:#fff;padding:10px 13px;font:600 10px 'DM Sans';cursor:pointer;white-space:nowrap}.support-finish:hover{background:#27323b}.support-summary-closed{margin-bottom:0}.support-closed-actions{padding:11px 12px;border:1px solid #e0e6e3;border-radius:10px;background:#f5f7f6;color:#77828a;font-size:10px;text-align:center}
+
+
+/* Cupom no checkout */
+.coupon-box{margin:18px 0;padding:16px;border:1px solid #e4e9e6;border-radius:14px;background:#fafcfb}
+.coupon-box-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px}
+.coupon-box-head strong{font-size:12px;color:#18212a}
+.coupon-box-head span{font-size:10px;color:#78827e;text-transform:uppercase;letter-spacing:.8px}
+.coupon-row{display:flex;gap:8px}
+.coupon-row input{flex:1;min-width:0;border:1px solid #d7dfdb;border-radius:9px;padding:11px 12px;font:600 12px 'DM Sans';text-transform:uppercase;outline:none;background:#fff}
+.coupon-row input:focus{border-color:#aab9b2;box-shadow:0 0 0 3px #eaf0ed}
+.coupon-apply{border:0;border-radius:9px;padding:0 16px;background:#18212a;color:#fff;font:700 11px 'DM Sans';cursor:pointer}
+.coupon-apply:hover{background:#27333d}
+.coupon-apply:disabled{opacity:.55;cursor:wait}
+.coupon-feedback{min-height:16px;margin-top:8px;font-size:10px;color:#78827e}
+.coupon-feedback.success{color:#2d7954}
+.coupon-feedback.error{color:#a03d3d}
+.checkout-prices{display:grid;grid-template-columns:1fr auto;gap:6px 12px}
+.checkout-prices .hidden{display:none}
+.discount-line{color:#2d7954}
+@media(max-width:560px){.coupon-row{flex-direction:column}.coupon-apply{height:42px}}
+
+.receipt-coupon{display:flex;justify-content:space-between;gap:12px;margin:10px 0;padding:9px 11px;border-radius:9px;background:#eef7f1;color:#2d7954;font-size:11px}
+.buyer-order-coupon{display:block;color:#2d7954;font-size:9px;margin-top:3px}
