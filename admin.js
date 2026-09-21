@@ -13,7 +13,7 @@ let adminCoupons = [];
 let selectedSupportId = null;
 let supportChannel = null;
 let ordersChannel = null;
-const FINANCE_OWNER_ID = 'be3c8f0d-d5aa-4052-9080-7b3ec42fbdf7';
+const FINANCE_OWNER_ID = '915bef33-abe4-4ce9-95e1-3745389bd9a4';
 let financeInitialBalance = 0;
 
 function showPageLoader(message = 'Processando...') {
@@ -66,6 +66,8 @@ async function requireAdmin() {
   }
   adminProfile = profile;
   $('#headerUser').textContent = adminProfile.full_name || adminUser.email || 'Administrador';
+  const balanceButton = $('#editInitialBalance');
+  if (balanceButton) balanceButton.classList.toggle('hidden', adminUser.id !== FINANCE_OWNER_ID);
   return true;
 }
 

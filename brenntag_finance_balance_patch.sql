@@ -50,7 +50,7 @@ security definer
 set search_path = public
 as $$
 declare
-  v_owner uuid := 'be3c8f0d-d5aa-4052-9080-7b3ec42fbdf7'::uuid;
+  v_owner uuid := '915bef33-abe4-4ce9-95e1-3745389bd9a4'::uuid;
   v_value numeric(14,2);
 begin
   if auth.uid() is null then
