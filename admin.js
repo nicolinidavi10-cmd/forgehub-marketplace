@@ -13,6 +13,8 @@ let adminCoupons = [];
 let selectedSupportId = null;
 let supportChannel = null;
 let ordersChannel = null;
+const FINANCE_OWNER_ID = 'be3c8f0d-d5aa-4052-9080-7b3ec42fbdf7';
+let financeInitialBalance = 0;
 
 function showPageLoader(message = 'Processando...') {
   const loader = $('#pageLoader');
@@ -68,13 +70,14 @@ async function requireAdmin() {
 }
 
 async function loadAdminData() {
-  const [productResult, orderResult, expenseResult, termsResult, supportResult, couponResult] = await Promise.all([
+  const [productResult, orderResult, expenseResult, termsResult, supportResult, couponResult, financeResult] = await Promise.all([
     db.from('products').select('*').order('id', { ascending: true }),
     db.from('orders').select('*, order_items(*), customer:profiles!orders_customer_id_fkey(id,full_name)').order('created_at', { ascending: false }),
     db.from('expenses').select('*').order('created_at', { ascending: false }),
     db.from('purchase_terms').select('*').eq('active', true).order('version', { ascending: false }).limit(1).maybeSingle(),
     db.from('support_attendances').select('*').order('last_message_at', { ascending: false }),
-    db.from('discount_coupons').select('*').order('created_at', { ascending: false })
+    db.from('discount_coupons').select('*').order('created_at', { ascending: false }),
+    db.rpc('finance_get_initial_balance')
   ]);
   if (productResult.error) throw productResult.error;
   if (orderResult.error) throw orderResult.error;
@@ -82,12 +85,14 @@ async function loadAdminData() {
   if (termsResult.error) throw termsResult.error;
   if (supportResult.error) throw supportResult.error;
   if (couponResult.error) throw couponResult.error;
+  if (financeResult.error) throw financeResult.error;
   adminProducts = productResult.data || [];
   adminOrders = orderResult.data || [];
   adminExpenses = expenseResult.data || [];
   currentTerms = termsResult.data || null;
   adminSupport = supportResult.data || [];
   adminCoupons = couponResult.data || [];
+  financeInitialBalance = Number(financeResult.data || 0);
 }
 
 function dataSummary() {
@@ -97,6 +102,8 @@ function dataSummary() {
     units: adminProducts.filter(x => x.active !== false).reduce((a, x) => a + Number(x.stock || 0), 0),
     income,
     out,
+    initialBalance: financeInitialBalance,
+    balance: financeInitialBalance + income - out,
     activeProducts: adminProducts.filter(x => x.active !== false).length,
     lowStock: adminProducts.filter(x => x.active !== false && Number(x.stock || 0) <= 5).length
   };
@@ -114,7 +121,9 @@ function renderDashboard() {
   $('#statExpense').textContent = brl(d.out);
   $('#financeIncome').textContent = brl(d.income);
   $('#financeExpense').textContent = brl(d.out);
-  $('#financeBalance').textContent = brl(d.income - d.out);
+  $('#financeBalance').textContent = brl(d.balance);
+  const balanceButton = $('#editInitialBalance');
+  if (balanceButton) balanceButton.classList.toggle('hidden', adminUser?.id !== FINANCE_OWNER_ID);
   $('#ordersCountLabel').textContent = adminOrders.length + ' pedidos';
   $('#stockCountLabel').textContent = d.units + ' unidades';
   renderChart(); renderDonut(); renderMoves();
@@ -401,6 +410,42 @@ function productForm(id) {
     } catch (error) {
       console.error(error);
       showAdminMessage(error.message || 'Não foi possível salvar o produto.', 'error');
+    } finally { hidePageLoader(); }
+  };
+}
+
+function initialBalanceForm() {
+  if (adminUser?.id !== FINANCE_OWNER_ID) {
+    showAdminMessage('Apenas o proprietário pode alterar o saldo inicial.', 'error');
+    return;
+  }
+  openModal(`
+    <h2>Alterar saldo inicial</h2>
+    <p class="section-note">Esta alteração é exclusiva do proprietário e não cria uma entrada ou saída financeira.</p>
+    <form id="initialBalanceForm" class="form-grid">
+      <label class="full">Saldo inicial
+        <input name="value" type="text" inputmode="decimal" required value="${escapeHtml(financeInitialBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}" placeholder="Ex.: 50000,00">
+      </label>
+      <div class="full finance-owner-warning">🔒 Somente o proprietário da conta pode salvar esta alteração.</div>
+      <button class="primary-btn full" type="submit">Salvar saldo inicial</button>
+    </form>
+  `);
+  $('#initialBalanceForm').onsubmit = async event => {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const raw = String(form.get('value') || '').trim();
+    const value = Number(raw.replace(/\./g, '').replace(',', '.'));
+    if (!Number.isFinite(value) || value < 0) return showAdminMessage('Saldo inicial inválido.', 'error');
+    showPageLoader('Salvando saldo inicial...');
+    try {
+      const { error } = await db.rpc('finance_set_initial_balance', { p_initial_balance: value });
+      if (error) throw error;
+      closeModal();
+      await refreshAdmin();
+      showAdminMessage('Saldo inicial atualizado.', 'success');
+    } catch (error) {
+      console.error(error);
+      showAdminMessage(error.message || 'Não foi possível alterar o saldo inicial.', 'error');
     } finally { hidePageLoader(); }
   };
 }
@@ -694,6 +739,7 @@ $('#logoutButton').onclick = async event => {
 $('#openProduct').onclick = () => productForm();
 $('#openProductFromStock').onclick = () => productForm();
 $('#openExpense').onclick = () => expenseForm();
+$('#editInitialBalance').onclick = () => initialBalanceForm();
 $('#openTerms').onclick = () => termsForm();
 $('#openCoupon').onclick = () => openCouponForm();
 $('#orderSearch').oninput = renderOrders;
