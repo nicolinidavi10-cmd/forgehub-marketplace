@@ -714,38 +714,62 @@ function openCouponForm(coupon=null){const isEdit=!!coupon;openModal(`<h2>${isEd
 async function deleteCoupon(id){if(!confirm('Excluir este cupom? Essa ação não poderá ser desfeita.'))return;showPageLoader('Excluindo cupom...');try{const {error}=await db.rpc('admin_delete_discount_coupon',{p_id:id});if(error)throw error;await refreshAdmin();showAdminMessage('Cupom excluído.','success');}catch(err){showAdminMessage(err.message||'Não foi possível excluir o cupom.','error');}finally{hidePageLoader();}}
 async function toggleCoupon(id){const c=adminCoupons.find(x=>String(x.id)===String(id));if(!c)return;showPageLoader(c.active?'Desativando cupom...':'Ativando cupom...');try{const {error}=await db.rpc('admin_save_discount_coupon',{p_id:c.id,p_code:c.code,p_discount_percent:Number(c.discount_percent),p_expires_at:c.expires_at,p_max_uses:c.max_uses,p_active:!c.active});if(error)throw error;await refreshAdmin();showAdminMessage(c.active?'Cupom desativado.':'Cupom ativado.','success');}catch(err){showAdminMessage(err.message||'Não foi possível alterar o cupom.','error');}finally{hidePageLoader();}}
 
+const DEFAULT_PROGRESSIVE_TIERS = [
+  { min_value: 500, discount_percent: 2, active: true },
+  { min_value: 1000, discount_percent: 4, active: true },
+  { min_value: 2000, discount_percent: 6, active: true },
+  { min_value: 5000, discount_percent: 8, active: true }
+];
+
+function normalizeProgressiveTiers(data) {
+  const source = Array.isArray(data) ? data : [];
+  if (!source.length) return DEFAULT_PROGRESSIVE_TIERS.map(t => ({ ...t }));
+
+  const rows = source.slice(0, 4).map(t => ({
+    id: t.id || null,
+    min_value: Number(t.min_value ?? 0),
+    discount_percent: Number(t.discount_percent ?? 0),
+    active: t.active !== false
+  }));
+
+  while (rows.length < 4) {
+    const fallback = DEFAULT_PROGRESSIVE_TIERS[rows.length];
+    rows.push({ ...fallback });
+  }
+  return rows;
+}
+
 async function loadProgressiveTiers() {
   try {
     const { data, error } = await db.from('cart_discount_tiers').select('id,min_value,discount_percent,active').order('min_value', { ascending: true });
     if (error) throw error;
-    progressiveTiers = data || [];
+    progressiveTiers = normalizeProgressiveTiers(data);
   } catch (error) {
-    progressiveTiers = [];
-    console.warn('Faixas de desconto progressivo indisponíveis:', error);
+    progressiveTiers = DEFAULT_PROGRESSIVE_TIERS.map(t => ({ ...t }));
+    console.warn('Faixas de desconto progressivo indisponíveis; usando as 4 faixas padrão:', error);
   }
 }
 
 function renderProgressiveTiers() {
   const body = $('#progressiveDiscountBody');
   if (!body) return;
-  const rows = progressiveTiers.length ? progressiveTiers : [
-    {min_value:500,discount_percent:2,active:true},
-    {min_value:1000,discount_percent:4,active:true},
-    {min_value:2000,discount_percent:6,active:true},
-    {min_value:5000,discount_percent:8,active:true}
-  ];
-  body.innerHTML = rows.map((tier, index) => `
+
+  progressiveTiers = normalizeProgressiveTiers(progressiveTiers);
+  body.innerHTML = progressiveTiers.map((tier, index) => `
     <tr>
-      <td><input class="progressive-min" data-index="${index}" type="number" min="0" step="0.01" value="${Number(tier.min_value||0)}"></td>
-      <td><input class="progressive-percent" data-index="${index}" type="number" min="0" max="100" step="0.01" value="${Number(tier.discount_percent||0)}"></td>
-      <td><label class="inline-check"><input class="progressive-active" data-index="${index}" type="checkbox" ${tier.active !== false ? 'checked' : ''}><span>Ativo</span></label></td>
+      <td><input aria-label="Valor mínimo da faixa ${index + 1}" class="progressive-min" data-index="${index}" type="number" min="0" step="0.01" value="${Number(tier.min_value || 0)}"></td>
+      <td><input aria-label="Desconto da faixa ${index + 1}" class="progressive-percent" data-index="${index}" type="number" min="0" max="100" step="0.01" value="${Number(tier.discount_percent || 0)}"></td>
+      <td><label class="inline-check"><input aria-label="Ativar faixa ${index + 1}" class="progressive-active" data-index="${index}" type="checkbox" ${tier.active !== false ? 'checked' : ''}><span>Ativo</span></label></td>
     </tr>
   `).join('');
 }
 
 async function saveProgressiveTiers() {
   const rows = [...document.querySelectorAll('#progressiveDiscountBody tr')];
-  if (!rows.length) return;
+  if (!rows.length) {
+    renderProgressiveTiers();
+    return;
+  }
   showPageLoader('Salvando descontos...');
   try {
     const payload = rows.map((row, index) => ({
@@ -753,7 +777,8 @@ async function saveProgressiveTiers() {
       min_value: Number(row.querySelector('.progressive-min')?.value || 0),
       discount_percent: Number(row.querySelector('.progressive-percent')?.value || 0),
       active: row.querySelector('.progressive-active')?.checked !== false
-    })).filter(x => x.min_value >= 0 && x.discount_percent >= 0 && x.discount_percent <= 100);
+    })).filter(x => Number.isFinite(x.min_value) && Number.isFinite(x.discount_percent) && x.min_value >= 0 && x.discount_percent >= 0 && x.discount_percent <= 100);
+    if (payload.length !== 4) throw new Error('Configure as 4 faixas antes de salvar.');
     const { error } = await db.rpc('admin_save_progressive_tiers', { p_tiers: payload });
     if (error) throw error;
     await loadProgressiveTiers();
@@ -796,6 +821,7 @@ function go(id) {
   section.classList.add('current');
   $$('.nav-group a').forEach(link => link.classList.toggle('active', link.dataset.section === id));
   history.replaceState(null, '', '#' + id);
+  if (id === 'descontosProgressivos') renderProgressiveTiers();
   section.scrollIntoView({ behavior:'smooth', block:'start' });
 }
 
@@ -817,7 +843,6 @@ $('#openProductFromStock').onclick = () => productForm();
 $('#openExpense').onclick = () => expenseForm();
 $('#editInitialBalance').onclick = () => initialBalanceForm();
 $('#openTerms').onclick = () => termsForm();
-$('#saveProgressiveDiscounts').onclick = () => saveProgressiveTiers();
 $('#saveProgressiveDiscounts').onclick = () => saveProgressiveTiers();
 $('#openCoupon').onclick = () => openCouponForm();
 $('#orderSearch').oninput = renderOrders;
