@@ -54,7 +54,7 @@ body:has(#deleteConfirmModal:not(.hidden)) {
 <li><a data-goto="estoque" href="#estoque" data-section="estoque"><span class="ic">▤</span> Estoque</a></li>
 <li><a href="#produtos" data-section="produtos"><span class="ic">◈</span> Gestão de produtos</a></li>
 <li><a data-goto="financeiro" href="#financeiro" data-section="financeiro"><span class="ic">↗</span> Financeiro</a></li>
-<li><a href="#cupons" data-section="cupons"><span class="ic">%</span> Cupons de desconto</a></li>
+<li><a href="#cupons" data-section="cupons"><span class="ic">%</span> Cupons de desconto</a></li><li><a href="#descontosProgressivos" data-section="descontosProgressivos"><span class="ic">↕</span> Descontos progressivos</a></li><li><a href="#avaliacoes" data-section="avaliacoes"><span class="ic">★</span> Avaliações</a></li>
 <li><a href="#atendimentos" data-section="atendimentos"><span class="ic">◌</span> Atendimentos</a></li>
 </ul><div class="sidebar-foot"><a href="index.html">← Voltar à loja</a><a href="#" id="logoutButton">↪ Sair do painel</a><div class="status-pill"><span class="status-dot"></span> Sistema protegido</div></div></aside>
 <main class="admin-main">
@@ -70,6 +70,26 @@ body:has(#deleteConfirmModal:not(.hidden)) {
 </section>
 
 <section id="pedidosSection" class="admin-section panel section-panel"><div class="panel-head"><div><h3>Pedidos feitos</h3><p class="section-note">Cada pedido vem do checkout da loja e altera o estoque automaticamente.</p></div><span id="ordersCountLabel">0 pedidos</span></div><div class="toolbar"><input id="orderSearch" placeholder="Pesquisar pedido ou produto..."><select id="orderStatusFilter"><option value="">Todos os status</option><option>Recebido</option><option>Em separação</option><option>Enviado</option><option>Concluído</option><option>Cancelado</option></select></div><div class="responsive-table"><table class="moves data-table"><thead><tr><th>Pedido</th><th>Data</th><th>Itens</th><th>Status</th><th>Valor</th><th>Ação</th><th>NF</th></tr></thead><tbody id="ordersBody"></tbody></table></div></section>
+
+<section id="descontosProgressivosSection" class="admin-section panel section-panel">
+  <div class="panel-head">
+    <div><h3>Descontos progressivos</h3><p class="section-note">Configure faixas automáticas para premiar carrinhos maiores. O desconto diminui automaticamente quando o cliente remove itens.</p></div>
+    <button class="primary-btn" id="saveProgressiveDiscounts">Salvar faixas</button>
+  </div>
+  <div class="progressive-admin-note">Use o valor mínimo do carrinho e o percentual correspondente. As faixas são aplicadas automaticamente pela maior faixa atingida.</div>
+  <div class="responsive-table"><table class="moves data-table">
+    <thead><tr><th>Valor mínimo</th><th>Desconto</th><th>Ativo</th></tr></thead>
+    <tbody id="progressiveDiscountBody"></tbody>
+  </table></div>
+</section>
+
+<section id="avaliacoesSection" class="admin-section panel section-panel">
+  <div class="panel-head"><div><h3>Avaliações dos clientes</h3><p class="section-note">Feedbacks enviados após o pedido ser marcado como Concluído.</p></div><span id="reviewsCountLabel">0 avaliações</span></div>
+  <div class="responsive-table"><table class="moves data-table">
+    <thead><tr><th>Pedido</th><th>Cliente</th><th>Nota</th><th>Feedback</th></tr></thead>
+    <tbody id="reviewsBody"></tbody>
+  </table></div>
+</section>
 
 <section id="estoqueSection" class="admin-section panel section-panel"><div class="panel-head"><div><h3>Estoque</h3><p class="section-note">O saldo abaixo é a quantidade atual dos produtos cadastrados.</p></div><span id="stockCountLabel">0 unidades</span></div><div class="toolbar"><input id="stockSearch" placeholder="Pesquisar produto..."><button class="primary-btn" id="openProductFromStock">+ Novo produto</button></div><div class="responsive-table"><table class="moves data-table"><thead><tr><th>Produto</th><th>Categoria</th><th>Quantidade</th><th>Preço</th><th>Situação</th><th>Ação</th></tr></thead><tbody id="stockBody"></tbody></table></div></section>
 

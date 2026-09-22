@@ -10,6 +10,8 @@ let currentTerms = null;
 let activeProductImagePath = null;
 let adminSupport = [];
 let adminCoupons = [];
+let adminReviews = [];
+let progressiveTiers = [];
 let selectedSupportId = null;
 let supportChannel = null;
 let ordersChannel = null;
@@ -72,14 +74,15 @@ async function requireAdmin() {
 }
 
 async function loadAdminData() {
-  const [productResult, orderResult, expenseResult, termsResult, supportResult, couponResult, financeResult] = await Promise.all([
+  const [productResult, orderResult, expenseResult, termsResult, supportResult, couponResult, financeResult, reviewResult] = await Promise.all([
     db.from('products').select('*').order('id', { ascending: true }),
     db.from('orders').select('*, order_items(*), customer:profiles!orders_customer_id_fkey(id,full_name)').order('created_at', { ascending: false }),
     db.from('expenses').select('*').order('created_at', { ascending: false }),
     db.from('purchase_terms').select('*').eq('active', true).order('version', { ascending: false }).limit(1).maybeSingle(),
     db.from('support_attendances').select('*').order('last_message_at', { ascending: false }),
     db.from('discount_coupons').select('*').order('created_at', { ascending: false }),
-    db.rpc('finance_get_initial_balance')
+    db.rpc('finance_get_initial_balance'),
+    db.from('order_reviews').select('*, customer:profiles!order_reviews_customer_id_fkey(id,full_name)').order('created_at', { ascending: false })
   ]);
   if (productResult.error) throw productResult.error;
   if (orderResult.error) throw orderResult.error;
@@ -88,12 +91,14 @@ async function loadAdminData() {
   if (supportResult.error) throw supportResult.error;
   if (couponResult.error) throw couponResult.error;
   if (financeResult.error) throw financeResult.error;
+  if (reviewResult.error) throw reviewResult.error;
   adminProducts = productResult.data || [];
   adminOrders = orderResult.data || [];
   adminExpenses = expenseResult.data || [];
   currentTerms = termsResult.data || null;
   adminSupport = supportResult.data || [];
   adminCoupons = couponResult.data || [];
+  adminReviews = reviewResult.data || [];
   financeInitialBalance = Number(financeResult.data || 0);
 }
 
@@ -709,9 +714,78 @@ function openCouponForm(coupon=null){const isEdit=!!coupon;openModal(`<h2>${isEd
 async function deleteCoupon(id){if(!confirm('Excluir este cupom? Essa ação não poderá ser desfeita.'))return;showPageLoader('Excluindo cupom...');try{const {error}=await db.rpc('admin_delete_discount_coupon',{p_id:id});if(error)throw error;await refreshAdmin();showAdminMessage('Cupom excluído.','success');}catch(err){showAdminMessage(err.message||'Não foi possível excluir o cupom.','error');}finally{hidePageLoader();}}
 async function toggleCoupon(id){const c=adminCoupons.find(x=>String(x.id)===String(id));if(!c)return;showPageLoader(c.active?'Desativando cupom...':'Ativando cupom...');try{const {error}=await db.rpc('admin_save_discount_coupon',{p_id:c.id,p_code:c.code,p_discount_percent:Number(c.discount_percent),p_expires_at:c.expires_at,p_max_uses:c.max_uses,p_active:!c.active});if(error)throw error;await refreshAdmin();showAdminMessage(c.active?'Cupom desativado.':'Cupom ativado.','success');}catch(err){showAdminMessage(err.message||'Não foi possível alterar o cupom.','error');}finally{hidePageLoader();}}
 
+async function loadProgressiveTiers() {
+  try {
+    const { data, error } = await db.from('cart_discount_tiers').select('id,min_value,discount_percent,active').order('min_value', { ascending: true });
+    if (error) throw error;
+    progressiveTiers = data || [];
+  } catch (error) {
+    progressiveTiers = [];
+    console.warn('Faixas de desconto progressivo indisponíveis:', error);
+  }
+}
+
+function renderProgressiveTiers() {
+  const body = $('#progressiveDiscountBody');
+  if (!body) return;
+  const rows = progressiveTiers.length ? progressiveTiers : [
+    {min_value:500,discount_percent:2,active:true},
+    {min_value:1000,discount_percent:4,active:true},
+    {min_value:2000,discount_percent:6,active:true},
+    {min_value:5000,discount_percent:8,active:true}
+  ];
+  body.innerHTML = rows.map((tier, index) => `
+    <tr>
+      <td><input class="progressive-min" data-index="${index}" type="number" min="0" step="0.01" value="${Number(tier.min_value||0)}"></td>
+      <td><input class="progressive-percent" data-index="${index}" type="number" min="0" max="100" step="0.01" value="${Number(tier.discount_percent||0)}"></td>
+      <td><label class="inline-check"><input class="progressive-active" data-index="${index}" type="checkbox" ${tier.active !== false ? 'checked' : ''}><span>Ativo</span></label></td>
+    </tr>
+  `).join('');
+}
+
+async function saveProgressiveTiers() {
+  const rows = [...document.querySelectorAll('#progressiveDiscountBody tr')];
+  if (!rows.length) return;
+  showPageLoader('Salvando descontos...');
+  try {
+    const payload = rows.map((row, index) => ({
+      id: progressiveTiers[index]?.id || null,
+      min_value: Number(row.querySelector('.progressive-min')?.value || 0),
+      discount_percent: Number(row.querySelector('.progressive-percent')?.value || 0),
+      active: row.querySelector('.progressive-active')?.checked !== false
+    })).filter(x => x.min_value >= 0 && x.discount_percent >= 0 && x.discount_percent <= 100);
+    const { error } = await db.rpc('admin_save_progressive_tiers', { p_tiers: payload });
+    if (error) throw error;
+    await loadProgressiveTiers();
+    renderProgressiveTiers();
+    showAdminMessage('Descontos progressivos atualizados.', 'success');
+  } catch (error) {
+    showAdminMessage(error.message || 'Não foi possível salvar as faixas.', 'error');
+  } finally {
+    hidePageLoader();
+  }
+}
+
+function renderReviews() {
+  const body = $('#reviewsBody');
+  const count = $('#reviewsCountLabel');
+  if (!body) return;
+  if (count) count.textContent = `${adminReviews.length} avaliações`;
+  body.innerHTML = adminReviews.map(review => {
+    const stars = '★'.repeat(Number(review.rating || 0)) + '☆'.repeat(5 - Number(review.rating || 0));
+    return `<tr>
+      <td>#${String(review.order_id).padStart(6,'0')}</td>
+      <td>${new Date(review.created_at).toLocaleString('pt-BR')}<br><small>${escapeHtml(review.customer?.full_name || 'Cliente')}</small></td>
+      <td><span class="review-stars-mini">${stars}</span></td>
+      <td>${escapeHtml(review.comment || '—')}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="4">Nenhuma avaliação recebida ainda.</td></tr>';
+}
+
 async function refreshAdmin() {
   await loadAdminData();
-  renderDashboard(); renderOrders(); renderStock(); renderProducts(); renderFinance(); termsSection(); renderSupport(); renderCoupons();
+  await loadProgressiveTiers();
+  renderDashboard(); renderOrders(); renderStock(); renderProducts(); renderFinance(); termsSection(); renderSupport(); renderCoupons(); renderReviews(); renderProgressiveTiers();
   $('#lastUpdate').textContent = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 }
 
@@ -743,6 +817,8 @@ $('#openProductFromStock').onclick = () => productForm();
 $('#openExpense').onclick = () => expenseForm();
 $('#editInitialBalance').onclick = () => initialBalanceForm();
 $('#openTerms').onclick = () => termsForm();
+$('#saveProgressiveDiscounts').onclick = () => saveProgressiveTiers();
+$('#saveProgressiveDiscounts').onclick = () => saveProgressiveTiers();
 $('#openCoupon').onclick = () => openCouponForm();
 $('#orderSearch').oninput = renderOrders;
 $('#orderStatusFilter').onchange = renderOrders;

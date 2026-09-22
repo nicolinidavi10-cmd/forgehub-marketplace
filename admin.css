@@ -508,3 +508,22 @@ table.moves td.val.out{color:var(--out)}
 .nf-status-mini{display:inline-flex;align-items:center;padding:4px 7px;border-radius:999px;font-size:10px;font-weight:800;background:#fff2d8;color:#986100;margin-right:4px}
 .nf-status-mini.approved{background:#e4f6e8;color:#26723a}.nf-status-mini.sent{background:#e5f0ff;color:#245d9f}
 @media(max-width:800px){.invoice-admin-card{width:calc(100vw - 20px);height:92vh}.invoice-admin-preview{min-height:380px}.invoice-admin-body{padding:12px}}
+
+
+/* Descontos progressivos e avaliações */
+.progressive-admin-note {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(24,119,242,.05);
+  color: #687386;
+}
+#progressiveDiscountBody input[type="number"] {
+  width: 130px;
+  max-width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #d9dee7;
+  border-radius: 9px;
+}
+.inline-check { display:inline-flex; gap:8px; align-items:center; }
+.review-stars-mini { color:#e0a100; letter-spacing:1px; white-space:nowrap; }

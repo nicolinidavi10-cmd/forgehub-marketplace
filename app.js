@@ -4,6 +4,7 @@ let cart = [];
 let buyerOrders = [];
 let currentTerms = null;
 let currentCoupon = null;
+let currentProgressiveDiscount = null;
 
 const grid = document.querySelector('#productGrid');
 const filters = document.querySelector('#filters');
@@ -262,6 +263,30 @@ function cartTotal() {
   }, 0);
 }
 
+async function previewProgressiveDiscount(subtotal = cartTotal()) {
+  try {
+    const { data, error } = await db.rpc('preview_progressive_cart_discount', {
+      p_subtotal: Number(subtotal || 0)
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    currentProgressiveDiscount = row ? {
+      minValue: Number(row.min_value || 0),
+      percent: Number(row.discount_percent || 0),
+      discount: Number(row.discount_amount || 0),
+      total: Number(row.total || subtotal),
+      nextMinValue: row.next_min_value == null ? null : Number(row.next_min_value),
+      nextPercent: row.next_discount_percent == null ? null : Number(row.next_discount_percent)
+    } : null;
+    return currentProgressiveDiscount;
+  } catch (error) {
+    // O recurso fica desativado até o patch SQL ser aplicado.
+    currentProgressiveDiscount = null;
+    console.warn('Desconto progressivo indisponível:', error);
+    return null;
+  }
+}
+
 async function fetchSession() {
   const { data } = await db.auth.getSession();
   return data.session;
@@ -286,7 +311,7 @@ async function fetchTerms() {
   return currentTerms;
 }
 
-function renderCart() {
+async function renderCart() {
   const detail = document.querySelector('#cartDetail');
   if (!detail) return;
 
@@ -299,6 +324,14 @@ function renderCart() {
     return;
   }
 
+  const subtotal = cartTotal();
+  const progressive = await previewProgressiveDiscount(subtotal);
+  const progressText = progressive?.percent
+    ? (progressive.nextMinValue != null
+      ? `Faltam R$ ${money(Math.max(0, progressive.nextMinValue - subtotal))} para chegar a ${progressive.nextPercent}% de desconto.`
+      : `Você alcançou ${progressive.percent}% de desconto progressivo.`)
+    : '';
+
   detail.innerHTML = `
     <p class="eyebrow">PEDIDO</p>
     <h2>Seu carrinho</h2>
@@ -306,7 +339,7 @@ function renderCart() {
       ${cart.map(item => {
         const p = products.find(x => x.id === item.id);
         if (!p) return '';
-        const subtotal = p.price * item.quantity;
+        const itemSubtotal = p.price * item.quantity;
         return `
           <div class="cart-item">
             <div class="cart-item-main">
@@ -323,14 +356,23 @@ function renderCart() {
                 <span>${item.quantity}</span>
                 <button type="button" data-cart-action="increase" data-id="${p.id}">+</button>
               </div>
-              <strong>R$ ${money(subtotal)}</strong>
+              <strong>R$ ${money(itemSubtotal)}</strong>
               <button type="button" class="cart-remove" data-cart-action="remove" data-id="${p.id}">Remover</button>
             </div>
           </div>
         `;
       }).join('')}
     </div>
-    <div class="cart-summary"><span>Total</span><strong>R$ ${money(cartTotal())}</strong></div>
+    ${progressive?.percent ? `
+      <div class="progressive-discount-box">
+        <div><span>Desconto progressivo</span><strong>${progressive.percent}% · - R$ ${money(progressive.discount)}</strong></div>
+        <small>${progressText}</small>
+      </div>
+    ` : ''}
+    <div class="cart-summary">
+      <span>Subtotal</span><strong>R$ ${money(subtotal)}</strong>
+      ${progressive?.percent ? `<span class="discount-line">Desconto progressivo</span><strong class="discount-line">- R$ ${money(progressive.discount)}</strong><span>Total</span><strong>R$ ${money(progressive.total)}</strong>` : ''}
+    </div>
     <button class="buy" id="finishOrder">Continuar para finalizar</button>
   `;
 
@@ -360,6 +402,7 @@ async function openCheckout() {
   const version = currentTerms?.version;
   currentCoupon = null;
   const subtotal = cartTotal();
+  const progressive = await previewProgressiveDiscount(subtotal);
 
   detail.innerHTML = `
     <p class="eyebrow">FINALIZAÇÃO</p>
@@ -380,9 +423,11 @@ async function openCheckout() {
     </div>
     <div class="cart-summary checkout-prices">
       <span>Subtotal</span><strong id="checkoutSubtotal">R$ ${money(subtotal)}</strong>
-      <span class="discount-line hidden" id="checkoutDiscountLabel">Desconto</span><strong class="discount-line hidden" id="checkoutDiscount">- R$ 0,00</strong>
-      <span>Total</span><strong id="checkoutTotal">R$ ${money(subtotal)}</strong>
+      ${progressive?.percent ? `<span class="discount-line" id="progressiveDiscountLabel">Desconto progressivo (${progressive.percent}%)</span><strong class="discount-line" id="progressiveDiscount">- R$ ${money(progressive.discount)}</strong>` : ''}
+      <span class="discount-line hidden" id="checkoutDiscountLabel">Cupom</span><strong class="discount-line hidden" id="checkoutDiscount">- R$ 0,00</strong>
+      <span>Total</span><strong id="checkoutTotal">R$ ${money(progressive?.total ?? subtotal)}</strong>
     </div>
+    ${progressive?.percent ? `<div class="progressive-discount-box compact"><small>${progressive.nextMinValue != null ? `Faltam R$ ${money(Math.max(0, progressive.nextMinValue - subtotal))} para chegar a ${progressive.nextPercent}%.` : `Você alcançou a maior faixa de desconto progressivo.`}</small></div>` : ''}
     <div class="terms-box">
       <div class="terms-box-head">
         <strong>${currentTerms?.title || 'Termos de compra'}</strong>
@@ -404,6 +449,12 @@ async function openCheckout() {
     if (event.key === 'Enter') { event.preventDefault(); applyCheckoutCoupon(); }
   });
   detail.querySelector('#confirmOrder')?.addEventListener('click', createOrderFromCart);
+}
+
+function progressiveBaseForCoupon() {
+  const subtotal = cartTotal();
+  const progressiveDiscount = Number(currentProgressiveDiscount?.discount || 0);
+  return Math.max(0, subtotal - progressiveDiscount);
 }
 
 async function applyCheckoutCoupon() {
@@ -429,11 +480,16 @@ async function applyCheckoutCoupon() {
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
     if (!row) throw new Error('Cupom inválido.');
+    const couponBase = progressiveBaseForCoupon();
+    const couponPercent = Number(row.discount_percent);
+    const couponDiscount = Math.round(couponBase * couponPercent) / 100;
+    const progressiveDiscount = Number(currentProgressiveDiscount?.discount || 0);
+    const combinedTotal = Math.max(0, subtotal - progressiveDiscount - couponDiscount);
     currentCoupon = {
       code: row.code,
-      percent: Number(row.discount_percent),
-      discount: Number(row.discount_amount),
-      total: Number(row.total)
+      percent: couponPercent,
+      discount: couponDiscount,
+      total: combinedTotal
     };
     document.querySelector('#checkoutDiscountLabel')?.classList.remove('hidden');
     document.querySelector('#checkoutDiscount')?.classList.remove('hidden');
@@ -445,7 +501,7 @@ async function applyCheckoutCoupon() {
     currentCoupon = null;
     document.querySelector('#checkoutDiscountLabel')?.classList.add('hidden');
     document.querySelector('#checkoutDiscount')?.classList.add('hidden');
-    document.querySelector('#checkoutTotal').textContent = `R$ ${money(cartTotal())}`;
+    document.querySelector('#checkoutTotal').textContent = `R$ ${money(currentProgressiveDiscount?.total ?? cartTotal())}`;
     feedback.textContent = error.message || 'Não foi possível aplicar o cupom.';
     feedback.className = 'coupon-feedback error';
   } finally {
@@ -495,6 +551,16 @@ async function createOrderFromCart() {
     });
 
     if (error) throw error;
+
+    if (currentProgressiveDiscount?.percent) {
+      const { error: progressiveError } = await db.rpc('apply_progressive_order_discount', {
+        p_order_id: orderId
+      });
+      if (progressiveError) {
+        await db.rpc('cancel_order', { p_order_id: orderId });
+        throw progressiveError;
+      }
+    }
 
     if (currentCoupon?.code) {
       const { error: couponError } = await db.rpc('apply_discount_coupon', {
@@ -647,6 +713,12 @@ async function renderBuyerOrders() {
   }
 
   buyerOrders = data || [];
+  if (buyerOrders.length) {
+    const orderIds = buyerOrders.map(o => o.id);
+    const { data: reviews } = await db.from('order_reviews').select('order_id,rating,comment,created_at').in('order_id', orderIds);
+    const reviewMap = new Map((reviews || []).map(r => [r.order_id, r]));
+    buyerOrders.forEach(order => { order.review = reviewMap.get(order.id) || null; });
+  }
 
   if (!buyerOrders.length) {
     container.innerHTML = `
@@ -698,10 +770,63 @@ async function renderBuyerOrders() {
             `).join('')}
           </div>
           ${canCancel ? `<button class="cancel-order-btn" data-cancel-order="${order.id}">Cancelar pedido</button>` : ''}
+          ${order.status === 'Concluído' ? `
+            <div class="buyer-review-area">
+              ${order.review?.rating ? `
+                <div class="review-submitted"><strong>Seu feedback</strong><span>${'★'.repeat(Number(order.review.rating))}${'☆'.repeat(5-Number(order.review.rating))}</span><small>${escapeHtml(order.review.comment || 'Obrigado pela avaliação!')}</small></div>
+              ` : `<button class="review-order-btn" data-review-order="${order.id}">⭐ Avaliar compra</button>`}
+            </div>
+          ` : ''}
         `}
       </article>
     `;
   }).join('');
+}
+
+function openReviewModal(orderId) {
+  const order = buyerOrders.find(o => String(o.id) === String(orderId));
+  if (!order || order.status !== 'Concluído') return;
+  const modal = document.querySelector('#reviewModal');
+  const detail = document.querySelector('#reviewDetail');
+  if (!modal || !detail) return;
+  detail.innerHTML = `
+    <p class="eyebrow">PEDIDO #${String(order.id).padStart(6,'0')}</p>
+    <h2>Avalie sua compra</h2>
+    <p class="review-intro">Seu pedido foi concluído. Conte como foi sua experiência.</p>
+    <div class="review-stars" role="radiogroup" aria-label="Nota da compra">
+      ${[1,2,3,4,5].map(n => `<button type="button" class="review-star" data-rating="${n}" aria-label="${n} estrela${n>1?'s':''}">★</button>`).join('')}
+    </div>
+    <textarea id="reviewComment" maxlength="1000" placeholder="Escreva seu feedback (opcional)..."></textarea>
+    <button type="button" class="buy" id="submitReview">Enviar feedback</button>
+  `;
+  modal.classList.remove('hidden');
+  let selected = 5;
+  detail.querySelectorAll('.review-star').forEach(btn => {
+    btn.classList.toggle('selected', Number(btn.dataset.rating) <= selected);
+    btn.addEventListener('click', () => {
+      selected = Number(btn.dataset.rating);
+      detail.querySelectorAll('.review-star').forEach(star => star.classList.toggle('selected', Number(star.dataset.rating) <= selected));
+    });
+  });
+  detail.querySelector('#submitReview').onclick = async () => {
+    const comment = detail.querySelector('#reviewComment')?.value.trim() || '';
+    const button = detail.querySelector('#submitReview');
+    button.disabled = true;
+    try {
+      const { error } = await db.rpc('submit_order_review', {
+        p_order_id: Number(orderId),
+        p_rating: selected,
+        p_comment: comment
+      });
+      if (error) throw error;
+      modal.classList.add('hidden');
+      await renderBuyerOrders();
+      showToast('Obrigado pelo seu feedback!', 'success');
+    } catch (error) {
+      showToast(error.message || 'Não foi possível enviar seu feedback.', 'error');
+      button.disabled = false;
+    }
+  };
 }
 
 async function cancelBuyerOrder(orderId) {
@@ -839,8 +964,10 @@ document.querySelector('#cartDetail').addEventListener('click', event => {
 });
 
 document.querySelector('#buyerOrders')?.addEventListener('click', event => {
-  const button = event.target.closest('[data-cancel-order]');
-  if (button) cancelBuyerOrder(button.dataset.cancelOrder);
+  const cancelButton = event.target.closest('[data-cancel-order]');
+  if (cancelButton) return cancelBuyerOrder(cancelButton.dataset.cancelOrder);
+  const reviewButton = event.target.closest('[data-review-order]');
+  if (reviewButton) openReviewModal(reviewButton.dataset.reviewOrder);
 });
 
 document.querySelectorAll('[data-close]').forEach(button => {
