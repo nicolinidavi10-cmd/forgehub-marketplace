@@ -18,6 +18,15 @@ let ordersChannel = null;
 const FINANCE_OWNER_ID = '915bef33-abe4-4ce9-95e1-3745389bd9a4';
 let financeInitialBalance = 0;
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function showPageLoader(message = 'Processando...') {
   const loader = $('#pageLoader');
   if (!loader) return;
