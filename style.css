@@ -510,6 +510,127 @@ body{overflow-x:hidden;}
 @media(max-width:700px){.checkout-address-grid,.payment-options{grid-template-columns:1fr}.checkout-address-grid label.full{grid-column:auto}}
 
 
+
+/* Checkout: observação e parcelamento */
+.checkout-note-section textarea,
+#orderNote {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid #dfe5e2;
+  border-radius: 11px;
+  background: #fff;
+  color: #18212a;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  outline: none;
+  transition: border-color .18s, box-shadow .18s, background .18s;
+}
+
+.checkout-note-section textarea:focus,
+#orderNote:focus {
+  border-color: #91a56d;
+  box-shadow: 0 0 0 3px #91a56d20;
+}
+
+.installment-box {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #dfe5e2;
+  border-radius: 12px;
+  background: #f8faf9;
+}
+
+.installment-box.hidden {
+  display: none;
+}
+
+.installment-box-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.installment-box-head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.installment-box-head strong {
+  font-size: 12px;
+  color: #18212a;
+}
+
+.installment-box-head small {
+  font-size: 10px;
+  color: #78827e;
+}
+
+.installment-box-head > span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #edf3e6;
+  color: #526c23;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  white-space: nowrap;
+}
+
+.installment-field {
+  display: grid;
+  gap: 6px;
+  max-width: 260px;
+}
+
+.installment-field > span {
+  font-size: 10px;
+  font-weight: 600;
+  color: #4e5955;
+}
+
+.installment-field select {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid #d5ddd9;
+  border-radius: 9px;
+  background: #fff;
+  color: #18212a;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.installment-field select:focus {
+  border-color: #91a56d;
+  box-shadow: 0 0 0 3px #91a56d20;
+}
+
+.installment-result {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8e5;
+  color: #64717b;
+  font-size: 11px;
+}
+
+.installment-result span {
+  color: #526c23;
+  font-weight: 700;
+}
+
+.installment-result strong {
+  color: #18212a;
+  font-size: 13px;
+}
+
 /* ==================== FRETES ==================== */
 .shipping-options {
   display: grid;

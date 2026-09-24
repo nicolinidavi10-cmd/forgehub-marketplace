@@ -63,6 +63,7 @@ function updateCheckoutTotals() {
 
   const totalLabel = document.querySelector('#checkoutTotal');
   if (totalLabel) totalLabel.textContent = `R$ ${money(total)}`;
+  document.dispatchEvent(new CustomEvent('checkout:totals-updated'));
 }
 
 function renderShippingOptions(subtotal = cartTotal()) {
@@ -571,8 +572,29 @@ async function openCheckout() {
     <div class="checkout-section">
       <div class="checkout-section-head"><strong>Forma de pagamento</strong><span>Obrigatório</span></div>
       <div class="payment-options" id="paymentOptions">${paymentOptions}</div>
+      <div class="installment-box hidden" id="installmentBox">
+        <div class="installment-box-head">
+          <div>
+            <strong>Parcelamento</strong>
+            <small id="installmentHint">Escolha em quantas vezes deseja pagar.</small>
+          </div>
+          <span>Até 6x</span>
+        </div>
+        <label class="installment-field">
+          <span>Número de parcelas</span>
+          <select id="installmentSelect">
+            <option value="1">1x</option>
+            <option value="2">2x</option>
+            <option value="3">3x</option>
+            <option value="4">4x</option>
+            <option value="5">5x</option>
+            <option value="6">6x</option>
+          </select>
+        </label>
+        <div class="installment-result" id="installmentResult">1x de R$ 0,00</div>
+      </div>
     </div>
-    <div class="checkout-section">
+    <div class="checkout-section checkout-note-section">
       <div class="checkout-section-head"><strong>Observação do pedido</strong><span>Opcional</span></div>
       <textarea id="orderNote" maxlength="500" placeholder="Alguma informação importante para a separação ou entrega?"></textarea>
     </div>
@@ -615,10 +637,46 @@ async function openCheckout() {
   renderShippingOptions(subtotal);
   updateCheckoutTotals();
 
+  const installmentBox = detail.querySelector('#installmentBox');
+  const installmentSelect = detail.querySelector('#installmentSelect');
+  const installmentResult = detail.querySelector('#installmentResult');
+  const installmentHint = detail.querySelector('#installmentHint');
+
+  function refreshInstallments() {
+    const selectedPayment = detail.querySelector('input[name="paymentMethod"]:checked')?.value;
+    const showInstallments = selectedPayment === 'credit' || selectedPayment === 'boleto';
+    installmentBox?.classList.toggle('hidden', !showInstallments);
+    if (!showInstallments) return;
+
+    const totalText = detail.querySelector('#checkoutTotal')?.textContent || 'R$ 0,00';
+    const totalValue = Number(
+      totalText
+        .replace(/[^0-9,.-]/g, '')
+        .replace(/\./g, '')
+        .replace(',', '.')
+    ) || 0;
+    const installments = Math.min(6, Math.max(1, Number(installmentSelect?.value || 1)));
+    const installmentValue = totalValue / installments;
+
+    if (installmentHint) {
+      installmentHint.textContent = selectedPayment === 'credit'
+        ? 'Parcelamento simulado no cartão de crédito.'
+        : 'Parcelamento simulado no boleto.';
+    }
+    if (installmentResult) {
+      installmentResult.innerHTML = `<span>${installments}x</span> de <strong>R$ ${money(installmentValue)}</strong>`;
+    }
+  }
+
   detail.querySelectorAll('input[name="paymentMethod"]').forEach(input => input.addEventListener('change', () => {
     detail.querySelectorAll('.payment-option').forEach(option => option.classList.remove('selected'));
     input.closest('.payment-option')?.classList.add('selected');
+    refreshInstallments();
   }));
+
+  installmentSelect?.addEventListener('change', refreshInstallments);
+  refreshInstallments();
+
 
   const cepInput = detail.querySelector('#shippingCep');
   cepInput?.addEventListener('input', () => {
