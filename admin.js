@@ -11,11 +11,13 @@ let activeProductImagePath = null;
 let adminSupport = [];
 let adminCoupons = [];
 let adminReviews = [];
+let paymentMethods = [];
 let progressiveTiers = [];
 let selectedSupportId = null;
 let supportChannel = null;
 let ordersChannel = null;
 const FINANCE_OWNER_ID = '915bef33-abe4-4ce9-95e1-3745389bd9a4';
+const FINANCE_ADMIN_ID = '94c5c943-f19d-4804-bde9-3411dd550060';
 let financeInitialBalance = 0;
 
 function escapeHtml(value) {
@@ -78,12 +80,12 @@ async function requireAdmin() {
   adminProfile = profile;
   $('#headerUser').textContent = adminProfile.full_name || adminUser.email || 'Administrador';
   const balanceButton = $('#editInitialBalance');
-  if (balanceButton) balanceButton.classList.toggle('hidden', adminUser.id !== FINANCE_OWNER_ID);
+  if (balanceButton) balanceButton.classList.toggle('hidden', ![FINANCE_OWNER_ID, FINANCE_ADMIN_ID].includes(adminUser.id));
   return true;
 }
 
 async function loadAdminData() {
-  const [productResult, orderResult, expenseResult, termsResult, supportResult, couponResult, financeResult, reviewResult] = await Promise.all([
+  const [productResult, orderResult, expenseResult, termsResult, supportResult, couponResult, financeResult, reviewResult, paymentMethodsResult] = await Promise.all([
     db.from('products').select('*').order('id', { ascending: true }),
     db.from('orders').select('*, order_items(*), customer:profiles!orders_customer_id_fkey(id,full_name)').order('created_at', { ascending: false }),
     db.from('expenses').select('*').order('created_at', { ascending: false }),
@@ -91,7 +93,8 @@ async function loadAdminData() {
     db.from('support_attendances').select('*').order('last_message_at', { ascending: false }),
     db.from('discount_coupons').select('*').order('created_at', { ascending: false }),
     db.rpc('finance_get_initial_balance'),
-    db.from('order_reviews').select('*, customer:profiles!order_reviews_customer_id_fkey(id,full_name)').order('created_at', { ascending: false })
+    db.from('order_reviews').select('*, customer:profiles!order_reviews_customer_id_fkey(id,full_name)').order('created_at', { ascending: false }),
+    db.from('payment_methods').select('*').order('sort_order', { ascending: true })
   ]);
   if (productResult.error) throw productResult.error;
   if (orderResult.error) throw orderResult.error;
@@ -101,6 +104,7 @@ async function loadAdminData() {
   if (couponResult.error) throw couponResult.error;
   if (financeResult.error) throw financeResult.error;
   if (reviewResult.error) throw reviewResult.error;
+  if (paymentMethodsResult.error) throw paymentMethodsResult.error;
   adminProducts = productResult.data || [];
   adminOrders = orderResult.data || [];
   adminExpenses = expenseResult.data || [];
@@ -108,6 +112,7 @@ async function loadAdminData() {
   adminSupport = supportResult.data || [];
   adminCoupons = couponResult.data || [];
   adminReviews = reviewResult.data || [];
+  paymentMethods = paymentMethodsResult.data || [];
   financeInitialBalance = Number(financeResult.data || 0);
 }
 
@@ -222,7 +227,7 @@ function invoiceDraftPdf(order) {
   doc.setDrawColor(160); doc.rect(14,y-5,182,28); doc.setFont(undefined,'bold'); doc.text(`Pedido #${orderNumber}`,18,y+3);
   doc.setFont(undefined,'normal'); doc.text(`Emissão: ${new Date(order.created_at).toLocaleString('pt-BR')}`,18,y+10); doc.text(`Pagamento: Pix — Simulado`,18,y+17);
   doc.text(`Cliente: ${customerName}`,105,y+10); doc.text(`E-mail: ${order.customer_email || 'não informado'}`,105,y+17); y+=36;
-  doc.setFont(undefined,'bold'); doc.text('DESTINATÁRIO',14,y); doc.setFont(undefined,'normal'); doc.text(`Nome: ${customerName}`,14,y+7); doc.text(`E-mail: ${order.customer_email || 'não informado'}`,14,y+14); y+=25;
+  doc.setFont(undefined,'bold'); doc.text('DESTINATÁRIO',14,y); doc.setFont(undefined,'normal'); doc.text(`Nome: ${customerName}`,14,y+7); doc.text(`E-mail: ${order.customer_email || 'não informado'}`,14,y+14); doc.text(`Pagamento: ${order.payment_method_name || order.payment_method || 'não informado'}`,14,y+21); y+=32;doc.setFont(undefined,'bold'); doc.text('ENDEREÇO DE ENTREGA',14,y); doc.setFont(undefined,'normal'); doc.text(`${order.shipping_street || ''}, ${order.shipping_number || ''} - ${order.shipping_neighborhood || ''}`,14,y+7); doc.text(`${order.shipping_city || ''} - ${order.shipping_state || ''} | CEP ${order.shipping_cep || ''}`,14,y+14); if(order.shipping_complement) doc.text(`Complemento: ${order.shipping_complement}`,14,y+21); y += order.shipping_complement ? 32 : 25;
   doc.setFont(undefined,'bold'); doc.text('ITENS DA VENDA',14,y); y+=7; doc.line(14,y,196,y); y+=7;
   doc.text('Produto',14,y); doc.text('Qtd.',130,y); doc.text('Valor',165,y); y+=6; doc.setFont(undefined,'normal');
   (order.order_items||[]).forEach(item=>{doc.text(String(item.product_name||'').slice(0,58),14,y);doc.text(String(item.quantity||0),132,y);doc.text(`R$ ${brl(item.subtotal).replace('R$ ','')}`,165,y);y+=7;if(y>260){doc.addPage();y=20;}});
@@ -311,7 +316,7 @@ function renderProducts() {
   $('#productCards').innerHTML = list.map(p => `
     <article class="product-admin-card ${p.active === false ? 'inactive' : ''}">
       <div class="product-admin-image">${p.image_url ? `<img src="${p.image_url}" alt="${escapeHtml(p.name)}">` : `<span>${p.icon || '▥'}</span>`}</div>
-      <div class="product-admin-info"><span class="product-cat">${escapeHtml(p.category)}</span><h4>${escapeHtml(p.name)}</h4><p>${p.stock} unidades · ${brl(p.price)} ${p.active===false?'· Inativo':''}</p></div>
+      <div class="product-admin-info"><span class="product-cat">${escapeHtml(p.category)}</span><h4>${escapeHtml(p.name)}</h4><p><strong>Código:</strong> ${escapeHtml(p.product_code || 'Sem código')} · ${p.stock} unidades · ${brl(p.price)} ${p.active===false?'· Inativo':''}</p></div>
       <div><button class="icon-btn edit-product" data-id="${p.id}">Editar</button>${p.active === false ? `<button class="icon-btn activate-product" data-id="${p.id}">Ativar</button>` : `<button class="icon-btn danger delete-product" data-id="${p.id}">Desativar</button>`}</div>
     </article>
   `).join('') || '<p>Nenhum produto cadastrado.</p>';
@@ -352,7 +357,7 @@ async function imageToCompressedBlob(file) {
 }
 
 function productForm(id) {
-  const p = adminProducts.find(x => Number(x.id) === Number(id)) || { name:'', category:'', price:'', stock:0, icon:'⚙', image_url:'', description:'' };
+  const p = adminProducts.find(x => Number(x.id) === Number(id)) || { name:'', category:'', product_code:'', price:'', stock:0, icon:'⚙', image_url:'', description:'' };
   openModal(`
     <h2>${id ? 'Editar' : 'Cadastrar'} produto</h2>
     <form id="productForm" class="form-grid">
@@ -816,10 +821,36 @@ function renderReviews() {
   }).join('') || '<tr><td colspan="4">Nenhuma avaliação recebida ainda.</td></tr>';
 }
 
+function renderPaymentMethodsAdmin() {
+  const target = $('#paymentMethodsAdmin');
+  if (!target) return;
+  target.innerHTML = paymentMethods.map(method => `
+    <label class="payment-method-admin-card">
+      <span>
+        <strong>${escapeHtml(method.name)}</strong>
+        <small>${method.code === 'pix' ? 'Pagamento instantâneo' : method.code === 'credit' ? 'Cartão de crédito' : 'Pagamento por boleto'}</small>
+      </span>
+      <input type="checkbox" class="payment-method-toggle" data-code="${escapeHtml(method.code)}" ${method.active ? 'checked' : ''}>
+    </label>
+  `).join('') || '<p class="section-note">Nenhuma forma de pagamento cadastrada.</p>';
+}
+
+async function savePaymentMethod(code, active) {
+  const { error } = await db.rpc('admin_set_payment_method', {
+    p_code: code,
+    p_active: active
+  });
+  if (error) throw error;
+  const item = paymentMethods.find(x => x.code === code);
+  if (item) item.active = active;
+  renderPaymentMethodsAdmin();
+  showAdminMessage(`${item?.name || code} ${active ? 'ativado' : 'desativado'}.`, 'success');
+}
+
 async function refreshAdmin() {
   await loadAdminData();
   await loadProgressiveTiers();
-  renderDashboard(); renderOrders(); renderStock(); renderProducts(); renderFinance(); termsSection(); renderSupport(); renderCoupons(); renderReviews(); renderProgressiveTiers();
+  renderDashboard(); renderOrders(); renderStock(); renderProducts(); renderFinance(); renderPaymentMethodsAdmin(); termsSection(); renderSupport(); renderCoupons(); renderReviews(); renderProgressiveTiers();
   $('#lastUpdate').textContent = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 }
 
@@ -853,6 +884,14 @@ $('#openExpense').onclick = () => expenseForm();
 $('#editInitialBalance').onclick = () => initialBalanceForm();
 $('#openTerms').onclick = () => termsForm();
 $('#saveProgressiveDiscounts').onclick = () => saveProgressiveTiers();
+$('#paymentMethodsAdmin')?.addEventListener('change', async event => {
+  const input = event.target.closest('.payment-method-toggle');
+  if (!input) return;
+  input.disabled = true;
+  try { await savePaymentMethod(input.dataset.code, input.checked); }
+  catch (error) { input.checked = !input.checked; showAdminMessage(error.message || 'Não foi possível alterar a forma de pagamento.', 'error'); }
+  finally { input.disabled = false; }
+});
 $('#openCoupon').onclick = () => openCouponForm();
 $('#orderSearch').oninput = renderOrders;
 $('#orderStatusFilter').onchange = renderOrders;

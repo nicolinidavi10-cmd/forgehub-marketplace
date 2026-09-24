@@ -527,3 +527,14 @@ table.moves td.val.out{color:var(--out)}
 }
 .inline-check { display:inline-flex; gap:8px; align-items:center; }
 .review-stars-mini { color:#e0a100; letter-spacing:1px; white-space:nowrap; }
+
+
+.payment-methods-admin{margin:22px 0;padding:18px;border:1px solid var(--line);border-radius:14px;background:#fafcfb}
+.payment-methods-admin>div:first-child{margin-bottom:14px}
+.payment-methods-admin h3{margin:0 0 5px}
+.payment-methods-admin-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.payment-method-admin-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
+.payment-method-admin-card strong{display:block;font-size:13px}
+.payment-method-admin-card small{display:block;margin-top:4px;color:var(--muted);font-size:10px}
+.payment-method-admin-card input{width:19px;height:19px;accent-color:#526c23}
+@media(max-width:850px){.payment-methods-admin-grid{grid-template-columns:1fr}}

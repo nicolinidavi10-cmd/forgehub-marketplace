@@ -5,6 +5,7 @@ let buyerOrders = [];
 let currentTerms = null;
 let currentCoupon = null;
 let currentProgressiveDiscount = null;
+let activePaymentMethods = [];
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -388,6 +389,17 @@ async function renderCart() {
   detail.querySelector('#finishOrder')?.addEventListener('click', openCheckout);
 }
 
+async function fetchActivePaymentMethods() {
+  const { data, error } = await db
+    .from('payment_methods')
+    .select('code,name')
+    .eq('active', true)
+    .order('sort_order', { ascending: true });
+  if (error) throw error;
+  activePaymentMethods = data || [];
+  return activePaymentMethods;
+}
+
 async function openCheckout() {
   if (!cart.length) return;
 
@@ -401,9 +413,15 @@ async function openCheckout() {
 
   try {
     await fetchTerms();
+    await fetchActivePaymentMethods();
   } catch (error) {
     console.error(error);
-    showToast('Não foi possível carregar os termos de compra.', 'error');
+    showToast('Não foi possível carregar as opções de finalização da compra.', 'error');
+    return;
+  }
+
+  if (!activePaymentMethods.length) {
+    showToast('Nenhuma forma de pagamento está disponível no momento.', 'error');
     return;
   }
 
@@ -413,15 +431,44 @@ async function openCheckout() {
   const subtotal = cartTotal();
   const progressive = await previewProgressiveDiscount(subtotal);
 
+  const paymentOptions = activePaymentMethods.map((method, index) => `
+    <label class="payment-option ${index === 0 ? 'selected' : ''}">
+      <input type="radio" name="paymentMethod" value="${escapeHtml(method.code)}" ${index === 0 ? 'checked' : ''}>
+      <span class="payment-option-copy">
+        <strong>${escapeHtml(method.name)}</strong>
+        <small>${method.code === 'pix' ? 'Pagamento instantâneo' : method.code === 'credit' ? 'Cartão de crédito' : 'Pagamento por boleto'}</small>
+      </span>
+    </label>
+  `).join('');
+
   detail.innerHTML = `
     <p class="eyebrow">FINALIZAÇÃO</p>
     <h2>Confirmar pedido</h2>
     <div class="checkout-summary">
       ${cart.map(item => {
         const p = products.find(x => x.id === item.id);
-        return `<div><span>${item.quantity}x ${p.name}</span><strong>R$ ${money(p.price * item.quantity)}</strong></div>`;
+        return `<div><span>${item.quantity}x ${escapeHtml(p?.name || 'Produto')}</span><strong>R$ ${money((p?.price || 0) * item.quantity)}</strong></div>`;
       }).join('')}
     </div>
+
+    <div class="checkout-section">
+      <div class="checkout-section-head"><strong>Endereço de entrega</strong><span>Obrigatório</span></div>
+      <div class="checkout-address-grid">
+        <label>CEP<input id="shippingCep" maxlength="9" inputmode="numeric" autocomplete="postal-code" placeholder="00000-000" required></label>
+        <label>Estado<input id="shippingState" maxlength="2" autocomplete="address-level1" placeholder="ES" required></label>
+        <label class="full">Cidade<input id="shippingCity" autocomplete="address-level2" placeholder="Ex.: Vila Velha" required></label>
+        <label class="full">Rua<input id="shippingStreet" autocomplete="street-address" placeholder="Nome da rua" required></label>
+        <label>Número<input id="shippingNumber" maxlength="20" placeholder="123" required></label>
+        <label>Bairro<input id="shippingNeighborhood" autocomplete="address-line3" placeholder="Bairro" required></label>
+        <label class="full">Complemento <span class="optional-label">(opcional)</span><input id="shippingComplement" maxlength="120" placeholder="Apto, sala, bloco..."></label>
+      </div>
+    </div>
+
+    <div class="checkout-section">
+      <div class="checkout-section-head"><strong>Forma de pagamento</strong><span>Obrigatório</span></div>
+      <div class="payment-options" id="paymentOptions">${paymentOptions}</div>
+    </div>
+
     <div class="coupon-box">
       <div class="coupon-box-head"><strong>Tem um cupom de desconto?</strong><span>Opcional</span></div>
       <div class="coupon-row">
@@ -430,13 +477,16 @@ async function openCheckout() {
       </div>
       <div class="coupon-feedback" id="couponFeedback"></div>
     </div>
+
     <div class="cart-summary checkout-prices">
       <span>Subtotal</span><strong id="checkoutSubtotal">R$ ${money(subtotal)}</strong>
       ${progressive?.percent ? `<span class="discount-line" id="progressiveDiscountLabel">Desconto progressivo (${progressive.percent}%)</span><strong class="discount-line" id="progressiveDiscount">- R$ ${money(progressive.discount)}</strong>` : ''}
       <span class="discount-line hidden" id="checkoutDiscountLabel">Cupom</span><strong class="discount-line hidden" id="checkoutDiscount">- R$ 0,00</strong>
       <span>Total</span><strong id="checkoutTotal">R$ ${money(progressive?.total ?? subtotal)}</strong>
     </div>
+
     ${progressive?.percent ? `<div class="progressive-discount-box compact"><small>${progressive.nextMinValue != null ? `Faltam R$ ${money(Math.max(0, progressive.nextMinValue - subtotal))} para chegar a ${progressive.nextPercent}%.` : `Você alcançou a maior faixa de desconto progressivo.`}</small></div>` : ''}
+
     <div class="terms-box">
       <div class="terms-box-head">
         <strong>${currentTerms?.title || 'Termos de compra'}</strong>
@@ -451,6 +501,17 @@ async function openCheckout() {
     </div>
     <button class="buy" id="confirmOrder">Finalizar pedido</button>
   `;
+
+  detail.querySelectorAll('input[name="paymentMethod"]').forEach(input => input.addEventListener('change', () => {
+    detail.querySelectorAll('.payment-option').forEach(option => option.classList.remove('selected'));
+    input.closest('.payment-option')?.classList.add('selected');
+  }));
+
+  const cepInput = detail.querySelector('#shippingCep');
+  cepInput?.addEventListener('input', () => {
+    const digits = cepInput.value.replace(/\D/g, '').slice(0, 8);
+    cepInput.value = digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
+  });
 
   detail.querySelector('#readTerms')?.addEventListener('click', showTermsModal);
   detail.querySelector('#applyCoupon')?.addEventListener('click', applyCheckoutCoupon);
@@ -477,39 +538,62 @@ async function applyCheckoutCoupon() {
     feedback.className = 'coupon-feedback error';
     return;
   }
+
   button.disabled = true;
   input.disabled = true;
   feedback.textContent = 'Validando cupom...';
   feedback.className = 'coupon-feedback';
+
   try {
     const { data, error } = await db.rpc('preview_discount_coupon', {
       p_code: code,
       p_subtotal: cartTotal()
     });
     if (error) throw error;
+
     const row = Array.isArray(data) ? data[0] : data;
     if (!row) throw new Error('Cupom inválido.');
-    const couponBase = progressiveBaseForCoupon();
-    const couponPercent = Number(row.discount_percent);
-    const couponDiscount = Math.round(couponBase * couponPercent) / 100;
+
+    const subtotal = cartTotal();
+    const couponPercent = Number(row.discount_percent || 0);
+    const couponDiscount = Math.round(subtotal * couponPercent) / 100;
     const progressiveDiscount = Number(currentProgressiveDiscount?.discount || 0);
-    const combinedTotal = Math.max(0, subtotal - progressiveDiscount - couponDiscount);
+
+    // Os descontos não acumulam: somente o maior desconto é aplicado.
+    if (progressiveDiscount >= couponDiscount) {
+      currentCoupon = null;
+      document.querySelector('#checkoutDiscountLabel')?.classList.add('hidden');
+      document.querySelector('#checkoutDiscount')?.classList.add('hidden');
+      document.querySelector('#progressiveDiscountLabel')?.classList.remove('hidden');
+      document.querySelector('#progressiveDiscount')?.classList.remove('hidden');
+      document.querySelector('#checkoutTotal').textContent = `R$ ${money(Math.max(0, subtotal - progressiveDiscount))}`;
+      feedback.textContent = `O desconto progressivo de ${currentProgressiveDiscount?.percent || 0}% é maior ou igual a este cupom. Os descontos não são acumulados.`;
+      feedback.className = 'coupon-feedback error';
+      return;
+    }
+
     currentCoupon = {
       code: row.code,
       percent: couponPercent,
       discount: couponDiscount,
-      total: combinedTotal
+      total: Math.max(0, subtotal - couponDiscount)
     };
+
+    document.querySelector('#progressiveDiscountLabel')?.classList.add('hidden');
+    document.querySelector('#progressiveDiscount')?.classList.add('hidden');
     document.querySelector('#checkoutDiscountLabel')?.classList.remove('hidden');
     document.querySelector('#checkoutDiscount')?.classList.remove('hidden');
+    document.querySelector('#checkoutDiscountLabel').textContent = `Cupom (${currentCoupon.percent}%)`;
     document.querySelector('#checkoutDiscount').textContent = `- R$ ${money(currentCoupon.discount)}`;
     document.querySelector('#checkoutTotal').textContent = `R$ ${money(currentCoupon.total)}`;
-    feedback.textContent = `Cupom ${currentCoupon.code} aplicado: ${currentCoupon.percent}% de desconto.`;
+    feedback.textContent = `Cupom ${currentCoupon.code} aplicado. Ele substituiu o desconto progressivo porque oferece um desconto maior.`;
     feedback.className = 'coupon-feedback success';
   } catch (error) {
     currentCoupon = null;
     document.querySelector('#checkoutDiscountLabel')?.classList.add('hidden');
     document.querySelector('#checkoutDiscount')?.classList.add('hidden');
+    document.querySelector('#progressiveDiscountLabel')?.classList.remove('hidden');
+    document.querySelector('#progressiveDiscount')?.classList.remove('hidden');
     document.querySelector('#checkoutTotal').textContent = `R$ ${money(currentProgressiveDiscount?.total ?? cartTotal())}`;
     feedback.textContent = error.message || 'Não foi possível aplicar o cupom.';
     feedback.className = 'coupon-feedback error';
@@ -544,6 +628,29 @@ async function createOrderFromCart() {
     return;
   }
 
+  const getValue = id => String(document.querySelector(id)?.value || '').trim();
+  const shippingCep = getValue('#shippingCep');
+  const shippingState = getValue('#shippingState').toUpperCase();
+  const shippingCity = getValue('#shippingCity');
+  const shippingStreet = getValue('#shippingStreet');
+  const shippingNumber = getValue('#shippingNumber');
+  const shippingNeighborhood = getValue('#shippingNeighborhood');
+  const shippingComplement = getValue('#shippingComplement');
+  const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked')?.value;
+
+  if (!/^\d{5}-?\d{3}$/.test(shippingCep)) {
+    showToast('Informe um CEP válido.', 'error');
+    return;
+  }
+  if (!/^[A-Z]{2}$/.test(shippingState) || !shippingCity || !shippingStreet || !shippingNumber || !shippingNeighborhood) {
+    showToast('Preencha todos os campos obrigatórios do endereço.', 'error');
+    return;
+  }
+  if (!paymentMethod) {
+    showToast('Selecione uma forma de pagamento.', 'error');
+    return;
+  }
+
   const items = cart.map(item => ({
     product_id: item.id,
     quantity: item.quantity
@@ -556,7 +663,15 @@ async function createOrderFromCart() {
   try {
     const { data: orderId, error } = await db.rpc('create_order', {
       p_items: items,
-      p_terms_version: currentTerms.version
+      p_terms_version: currentTerms.version,
+      p_shipping_cep: shippingCep,
+      p_shipping_state: shippingState,
+      p_shipping_city: shippingCity,
+      p_shipping_street: shippingStreet,
+      p_shipping_number: shippingNumber,
+      p_shipping_neighborhood: shippingNeighborhood,
+      p_shipping_complement: shippingComplement || null,
+      p_payment_method: paymentMethod
     });
 
     if (error) throw error;
@@ -628,7 +743,7 @@ async function generateInvoiceDraftPDF(order, session) {
   doc.setFont(undefined, 'bold'); doc.text(`Pedido #${orderNumber}`, 18, y + 3);
   doc.setFont(undefined, 'normal');
   doc.text(`Emissão: ${new Date(order.created_at).toLocaleString('pt-BR')}`, 18, y + 10);
-  doc.text(`Pagamento: Pix — Simulado`, 18, y + 17);
+  doc.text(`Pagamento: ${String(order.payment_method_name || order.payment_method || 'Não informado')} — Simulado`, 18, y + 17);
   doc.text(`E-mail: ${customerEmail || 'não informado'}`, 105, y + 10);
   y += 36;
 
@@ -868,7 +983,7 @@ function showReceipt(order) {
     <div class="receipt-info">
       <div><span>Data</span><strong>${new Date(order.created_at).toLocaleDateString('pt-BR')}</strong></div>
       <div><span>Horário</span><strong>${new Date(order.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</strong></div>
-      <div><span>Pagamento</span><strong>Pix</strong></div>
+      <div><span>Pagamento</span><strong>${escapeHtml(order.payment_method_name || order.payment_method || 'Não informado')}</strong></div>
     </div>
     <div class="receipt-divider"></div>
     <p class="receipt-section-title">ITENS DO PEDIDO</p>
@@ -877,7 +992,7 @@ function showReceipt(order) {
     </div>
     ${order.coupon_code ? `<div class="receipt-coupon"><span>Cupom ${escapeHtml(order.coupon_code)} (${Number(order.discount_percent||0).toLocaleString('pt-BR',{maximumFractionDigits:2})}%)</span><strong>- R$ ${money(order.discount_amount)}</strong></div>` : ''}
     <div class="receipt-total"><span>Total</span><strong>R$ ${money(order.total)}</strong></div>
-    <div class="pix-box"><div class="pix-title"><span class="pix-symbol">◆</span><strong>Pagamento via Pix</strong></div><p>Este pedido utiliza uma simulação de pagamento para fins demonstrativos do marketplace.</p><div class="pix-code">PAGAMENTO-SIMULADO-${orderNumber}</div></div>
+    <div class="pix-box"><div class="pix-title"><span class="pix-symbol">◆</span><strong>Pagamento ${escapeHtml(order.payment_method_name || order.payment_method || 'simulado')}</strong></div><p>Este pedido utiliza uma simulação de pagamento para fins demonstrativos do marketplace.</p><div class="pix-code">PAGAMENTO-SIMULADO-${orderNumber}</div></div>
     <div class="receipt-actions">
       <button class="buy" id="downloadReceipt">Baixar comprovante PDF</button>
       <button class="buy" id="trackOrder">Acompanhar pedido</button>
@@ -906,7 +1021,7 @@ function downloadReceiptPDF(order) {
   doc.text(`Pedido: #${orderNumber}`, 20, y); y += 7;
   doc.text(`Data: ${new Date(order.created_at).toLocaleDateString('pt-BR')}`, 20, y); y += 7;
   doc.text(`Horário: ${new Date(order.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`, 20, y); y += 7;
-  doc.text('Pagamento: Pix — Simulado', 20, y); y += 15;
+  doc.text(`Pagamento: ${String(order.payment_method_name || order.payment_method || 'Não informado')} — Simulado`, 20, y); y += 15;
   doc.line(20, y, 190, y); y += 12;
   doc.setFont(undefined, 'bold'); doc.text('ITENS DO PEDIDO', 20, y); y += 10; doc.setFont(undefined, 'normal');
   (order.order_items || []).forEach(item => { doc.text(`${item.quantity}x ${item.product_name}`, 20, y); doc.text(`R$ ${money(item.subtotal)}`, 150, y); y += 8; });
