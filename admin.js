@@ -1069,9 +1069,15 @@ async function loadProgressiveTiers() {
     const { data, error } = await db.from('cart_discount_tiers').select('id,min_value,discount_percent,active').order('min_value', { ascending: true });
     if (error) throw error;
     progressiveTiers = normalizeProgressiveTiers(data);
+    return true;
   } catch (error) {
-    progressiveTiers = DEFAULT_PROGRESSIVE_TIERS.map(t => ({ ...t }));
-    console.warn('Faixas de desconto progressivo indisponíveis; usando as 4 faixas padrão:', error);
+    // Não substitui valores já carregados/salvos por padrões só porque a leitura falhou.
+    // Assim a tela não volta visualmente para 500/1000/2000/5000 nem reativa uma faixa que o admin desativou.
+    if (!progressiveTiers.length) {
+      progressiveTiers = DEFAULT_PROGRESSIVE_TIERS.map(t => ({ ...t }));
+    }
+    console.warn('Não foi possível recarregar as faixas de desconto progressivo:', error);
+    return false;
   }
 }
 
@@ -1106,6 +1112,12 @@ async function saveProgressiveTiers() {
     if (payload.length !== 4) throw new Error('Configure as 4 faixas antes de salvar.');
     const { error } = await db.rpc('admin_save_progressive_tiers', { p_tiers: payload });
     if (error) throw error;
+
+    // Atualiza a interface imediatamente com exatamente o que foi salvo.
+    // A leitura do banco abaixo serve apenas para sincronizar IDs/estado; se a leitura falhar,
+    // mantemos na tela os valores que acabaram de ser confirmados pelo RPC.
+    progressiveTiers = payload.map(tier => ({ ...tier }));
+    renderProgressiveTiers();
     await loadProgressiveTiers();
     renderProgressiveTiers();
     showAdminMessage('Descontos progressivos atualizados.', 'success');
