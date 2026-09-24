@@ -54,7 +54,7 @@ body:has(#deleteConfirmModal:not(.hidden)) {
 <li><a data-goto="estoque" href="#estoque" data-section="estoque"><span class="ic">▤</span> Estoque</a></li>
 <li><a href="#produtos" data-section="produtos"><span class="ic">◈</span> Gestão de produtos</a></li>
 <li><a data-goto="financeiro" href="#financeiro" data-section="financeiro"><span class="ic">↗</span> Financeiro</a></li>
-<li><a href="#cupons" data-section="cupons"><span class="ic">%</span> Cupons de desconto</a></li><li><a href="#descontosProgressivos" data-section="descontosProgressivos"><span class="ic">↕</span> Descontos progressivos</a></li><li><a href="#avaliacoes" data-section="avaliacoes"><span class="ic">★</span> Avaliações</a></li>
+<li><a href="#cupons" data-section="cupons"><span class="ic">%</span> Cupons de desconto</a></li><li><a href="#descontosProgressivos" data-section="descontosProgressivos"><span class="ic">↕</span> Descontos progressivos</a></li><li><a href="#fretes" data-section="fretes"><span class="ic">🚚</span> Fretes</a></li><li><a href="#avaliacoes" data-section="avaliacoes"><span class="ic">★</span> Avaliações</a></li>
 <li><a href="#atendimentos" data-section="atendimentos"><span class="ic">◌</span> Atendimentos</a></li>
 </ul><div class="sidebar-foot"><a href="index.html">← Voltar à loja</a><a href="#" id="logoutButton">↪ Sair do painel</a><div class="status-pill"><span class="status-dot"></span> Sistema protegido</div></div></aside>
 <main class="admin-main">
@@ -82,6 +82,14 @@ body:has(#deleteConfirmModal:not(.hidden)) {
     <tbody id="progressiveDiscountBody"></tbody>
   </table></div>
 </section>
+<section id="fretesSection" class="admin-section panel section-panel">
+  <div id="shippingAdminSection">
+    <div class="panel-head">
+      <div><h3>Fretes</h3><p class="section-note">Carregando configurações de frete...</p></div>
+    </div>
+  </div>
+</section>
+
 
 <section id="avaliacoesSection" class="admin-section panel section-panel">
   <div class="panel-head"><div><h3>Avaliações dos clientes</h3><p class="section-note">Feedbacks enviados após o pedido ser marcado como Concluído.</p></div><span id="reviewsCountLabel">0 avaliações</span></div>

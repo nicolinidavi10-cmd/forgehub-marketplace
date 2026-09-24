@@ -20,6 +20,225 @@ const FINANCE_OWNER_ID = '915bef33-abe4-4ce9-95e1-3745389bd9a4';
 const FINANCE_ADMIN_ID = '94c5c943-f19d-4804-bde9-3411dd550060';
 let financeInitialBalance = 0;
 
+let adminShippingMethods = [];
+let adminShippingSettings = { free_shipping_enabled: false, free_shipping_minimum: 0 };
+
+async function loadShippingAdmin() {
+  const [{ data: methods, error: methodsError }, { data: settings, error: settingsError }] = await Promise.all([
+    db.from('shipping_methods').select('*').order('sort_order', { ascending: true }),
+    db.from('shipping_settings').select('*').eq('id', 1).maybeSingle()
+  ]);
+
+  if (methodsError) throw methodsError;
+  if (settingsError) throw settingsError;
+
+  adminShippingMethods = methods || [];
+  adminShippingSettings = settings || adminShippingSettings;
+  renderShippingAdmin();
+}
+
+function renderShippingAdmin() {
+  const host = $('#shippingAdminSection');
+  if (!host) return;
+
+  host.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h3>Fretes</h3>
+        <p class="section-note">Defina as modalidades que aparecem no checkout, os preços e quando o frete grátis é liberado.</p>
+      </div>
+      <button type="button" class="secondary-btn" id="addShippingMethod">+ Adicionar modalidade</button>
+    </div>
+
+    <div class="shipping-settings-grid">
+      <label>Frete grátis
+        <select id="freeShippingEnabled">
+          <option value="false" ${!adminShippingSettings.free_shipping_enabled ? 'selected' : ''}>Desativado</option>
+          <option value="true" ${adminShippingSettings.free_shipping_enabled ? 'selected' : ''}>Ativado</option>
+        </select>
+      </label>
+      <label>Frete grátis a partir de
+        <input id="freeShippingMinimum" type="text" inputmode="decimal"
+          value="${Number(adminShippingSettings.free_shipping_minimum || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}">
+      </label>
+    </div>
+
+    <div class="shipping-admin-list">
+      ${adminShippingMethods.map(method => `
+        <div class="shipping-admin-row" data-id="${method.id}">
+          <div>
+            <label>Nome
+              <input class="shipping-name" value="${escapeHtml(method.name)}">
+            </label>
+          </div>
+          <div>
+            <label>Preço
+              <input class="shipping-price" type="text" inputmode="decimal"
+                value="${Number(method.price || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}">
+            </label>
+          </div>
+          <div>
+            <label>Status
+              <select class="shipping-active">
+                <option value="true" ${method.active ? 'selected' : ''}>Ativo</option>
+                <option value="false" ${!method.active ? 'selected' : ''}>Desativado</option>
+              </select>
+            </label>
+          </div>
+          <div class="shipping-admin-actions">
+            <button type="button" class="primary-btn save-shipping" data-id="${method.id}">Salvar</button>
+            <button type="button" class="icon-btn danger delete-shipping" data-id="${method.id}">Remover</button>
+          </div>
+        </div>
+      `).join('') || '<p class="section-note">Nenhuma modalidade cadastrada.</p>'}
+    </div>
+
+    <button type="button" class="primary-btn" id="saveShippingSettings">Salvar configuração de frete grátis</button>
+  `;
+
+  host.querySelectorAll('.save-shipping').forEach(button => {
+    button.addEventListener('click', () => saveShippingMethod(Number(button.dataset.id)));
+  });
+
+  host.querySelectorAll('.delete-shipping').forEach(button => {
+    button.addEventListener('click', () => deleteShippingMethod(Number(button.dataset.id)));
+  });
+
+  host.querySelector('#addShippingMethod')?.addEventListener('click', addShippingMethod);
+  host.querySelector('#saveShippingSettings')?.addEventListener('click', saveShippingSettings);
+}
+
+function parseAdminMoney(value) {
+  const raw = String(value ?? '').trim().replace(/\s/g, '');
+  if (!raw) return NaN;
+  return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw);
+}
+
+async function saveShippingMethod(id) {
+  const row = document.querySelector(`.shipping-admin-row[data-id="${id}"]`);
+  if (!row) return;
+
+  const name = row.querySelector('.shipping-name')?.value.trim();
+  const price = parseAdminMoney(row.querySelector('.shipping-price')?.value);
+  const active = row.querySelector('.shipping-active')?.value === 'true';
+
+  if (!name || !Number.isFinite(price) || price < 0) {
+    showAdminMessage('Informe um nome e um preço de frete válidos.', 'error');
+    return;
+  }
+
+  showPageLoader('Salvando modalidade de frete...');
+  try {
+    const { error } = await db.rpc('admin_update_shipping_method', {
+      p_id: id,
+      p_name: name,
+      p_price: price,
+      p_active: active
+    });
+    if (error) throw error;
+    await loadShippingAdmin();
+    showAdminMessage('Modalidade de frete atualizada.', 'success');
+  } catch (error) {
+    showAdminMessage(error.message || 'Não foi possível salvar o frete.', 'error');
+  } finally {
+    hidePageLoader();
+  }
+}
+
+async function addShippingMethod() {
+  openModal(`
+    <h2>Adicionar modalidade de frete</h2>
+    <form id="shippingMethodForm" class="form-grid">
+      <label class="full">Nome
+        <input name="name" required placeholder="Ex.: Agendado">
+      </label>
+      <label class="full">Preço
+        <input name="price" type="text" inputmode="decimal" required placeholder="Ex.: 55,00">
+      </label>
+      <label class="full">Status
+        <select name="active">
+          <option value="true">Ativo</option>
+          <option value="false">Desativado</option>
+        </select>
+      </label>
+      <button type="submit" class="primary-btn full">Adicionar modalidade</button>
+    </form>
+  `);
+
+  $('#shippingMethodForm').onsubmit = async event => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get('name') || '').trim();
+    const price = parseAdminMoney(form.get('price'));
+    const active = String(form.get('active')) === 'true';
+
+    if (!name || !Number.isFinite(price) || price < 0) {
+      showAdminMessage('Informe dados válidos para a modalidade.', 'error');
+      return;
+    }
+
+    showPageLoader('Adicionando modalidade...');
+    try {
+      const { error } = await db.rpc('admin_create_shipping_method', {
+        p_name: name,
+        p_price: price,
+        p_active: active
+      });
+      if (error) throw error;
+      closeModal();
+      await loadShippingAdmin();
+      showAdminMessage('Modalidade adicionada.', 'success');
+    } catch (error) {
+      showAdminMessage(error.message || 'Não foi possível adicionar a modalidade.', 'error');
+    } finally {
+      hidePageLoader();
+    }
+  };
+}
+
+async function deleteShippingMethod(id) {
+  const method = adminShippingMethods.find(item => Number(item.id) === Number(id));
+  if (!method) return;
+  if (!window.confirm(`Remover a modalidade "${method.name}"? Pedidos antigos continuarão registrados.`)) return;
+
+  showPageLoader('Removendo modalidade...');
+  try {
+    const { error } = await db.rpc('admin_delete_shipping_method', { p_id: id });
+    if (error) throw error;
+    await loadShippingAdmin();
+    showAdminMessage('Modalidade removida.', 'success');
+  } catch (error) {
+    showAdminMessage(error.message || 'Não foi possível remover a modalidade.', 'error');
+  } finally {
+    hidePageLoader();
+  }
+}
+
+async function saveShippingSettings() {
+  const enabled = $('#freeShippingEnabled')?.value === 'true';
+  const minimum = parseAdminMoney($('#freeShippingMinimum')?.value);
+
+  if (!Number.isFinite(minimum) || minimum < 0) {
+    showAdminMessage('Valor mínimo inválido.', 'error');
+    return;
+  }
+
+  showPageLoader('Salvando configuração de frete grátis...');
+  try {
+    const { error } = await db.rpc('admin_update_shipping_settings', {
+      p_enabled: enabled,
+      p_minimum: minimum
+    });
+    if (error) throw error;
+    await loadShippingAdmin();
+    showAdminMessage('Configuração de frete grátis salva.', 'success');
+  } catch (error) {
+    showAdminMessage(error.message || 'Não foi possível salvar a configuração.', 'error');
+  } finally {
+    hidePageLoader();
+  }
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -45,9 +264,6 @@ function hidePageLoader() {
 }
 function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 function brl(n) { return 'R$ ' + Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); }
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
-}
 function showAdminMessage(message, type = 'info') {
   const existing = $('#adminToast');
   existing?.remove();
@@ -144,7 +360,7 @@ function renderDashboard() {
   $('#financeExpense').textContent = brl(d.out);
   $('#financeBalance').textContent = brl(d.balance);
   const balanceButton = $('#editInitialBalance');
-  if (balanceButton) balanceButton.classList.toggle('hidden', adminUser?.id !== FINANCE_OWNER_ID);
+  if (balanceButton) balanceButton.classList.toggle('hidden', ![FINANCE_OWNER_ID, FINANCE_ADMIN_ID].includes(adminUser?.id));
   $('#ordersCountLabel').textContent = adminOrders.length + ' pedidos';
   $('#stockCountLabel').textContent = d.units + ' unidades';
   renderChart(); renderDonut(); renderMoves();
@@ -185,6 +401,98 @@ function invoiceStatusLabel(order) {
   return `<span class="nf-status-mini ${cls}">${escapeHtml(status)}</span>`;
 }
 
+
+function formatOrderAddress(order) {
+  const line1 = [order.shipping_street, order.shipping_number].filter(Boolean).join(', ');
+  const line2 = [order.shipping_neighborhood, order.shipping_city, order.shipping_state].filter(Boolean).join(' · ');
+  const line3 = order.shipping_cep ? `CEP ${order.shipping_cep}` : '';
+  return [line1, line2, line3, order.shipping_complement ? `Complemento: ${order.shipping_complement}` : '']
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join('<br>');
+}
+
+function openOrderDetails(orderId) {
+  const order = adminOrders.find(item => String(item.id) === String(orderId));
+  if (!order) return;
+
+  const items = order.order_items || [];
+  const subtotal = Number(order.subtotal ?? items.reduce((sum, item) => sum + Number(item.subtotal || 0), 0));
+  const discount = Number(order.discount_amount || 0) + Number(order.progressive_discount_amount || 0);
+  const shipping = Number(order.shipping_amount || 0);
+
+  openModal(`
+    <div class="order-detail-modal">
+      <div class="order-detail-head">
+        <div>
+          <p class="eyebrow">PEDIDO #${String(order.id).padStart(6, '0')}</p>
+          <h2>Detalhes do pedido</h2>
+        </div>
+        <span class="tag ${order.status === 'Cancelado' ? 'out' : 'in'}">${escapeHtml(order.status || 'Recebido')}</span>
+      </div>
+
+      <div class="order-detail-grid">
+        <section>
+          <h3>Cliente</h3>
+          <p><strong>${escapeHtml(order.customer?.full_name || 'Cliente')}</strong><br>${escapeHtml(order.customer_email || 'E-mail não informado')}</p>
+        </section>
+        <section>
+          <h3>Endereço de entrega</h3>
+          <p>${formatOrderAddress(order) || 'Endereço não informado.'}</p>
+        </section>
+        <section>
+          <h3>Pagamento</h3>
+          <p>${escapeHtml(order.payment_method_name || order.payment_method || 'Não informado')}</p>
+        </section>
+        <section>
+          <h3>Frete</h3>
+          <p><strong>${escapeHtml(order.shipping_method_name || 'Não informado')}</strong><br>${shipping > 0 ? brl(shipping) : 'Grátis'}</p>
+        </section>
+      </div>
+
+      <section class="order-detail-section">
+        <h3>Observação do pedido</h3>
+        <div class="order-detail-note">${escapeHtml(order.order_note || 'Nenhuma observação informada.')}</div>
+      </section>
+
+      <section class="order-detail-section">
+        <h3>Produtos</h3>
+        <div class="order-detail-items">
+          ${items.map(item => `
+            <div class="order-detail-item">
+              <div><strong>${escapeHtml(item.product_name || 'Produto')}</strong><small>${Number(item.quantity || 0)} × ${brl(item.unit_price)}</small></div>
+              <strong>${brl(item.subtotal)}</strong>
+            </div>
+          `).join('') || '<p>Nenhum item registrado.</p>'}
+        </div>
+      </section>
+
+      <section class="order-detail-section order-detail-totals">
+        <div><span>Subtotal</span><strong>${brl(subtotal)}</strong></div>
+        ${Number(order.progressive_discount_amount || 0) > 0 ? `<div><span>Desconto progressivo</span><strong>- ${brl(order.progressive_discount_amount)}</strong></div>` : ''}
+        ${Number(order.discount_amount || 0) > 0 ? `<div><span>Cupom ${escapeHtml(order.coupon_code || '')}</span><strong>- ${brl(order.discount_amount)}</strong></div>` : ''}
+        <div><span>Frete</span><strong>${shipping > 0 ? brl(shipping) : 'Grátis'}</strong></div>
+        <div class="grand"><span>Total</span><strong>${brl(order.total)}</strong></div>
+      </section>
+
+      <section class="order-detail-section">
+        <h3>Nota Fiscal</h3>
+        <p><strong>Status:</strong> ${invoiceStatusLabel(order)}${order.nf_file_name ? `<br><small>${escapeHtml(order.nf_file_name)}</small>` : ''}</p>
+        <div class="order-detail-actions">
+          <button type="button" class="secondary-btn" id="orderDetailInvoice">Abrir NF</button>
+          <button type="button" class="primary-btn" id="orderDetailClose">Fechar</button>
+        </div>
+      </section>
+    </div>
+  `);
+
+  $('#orderDetailInvoice')?.addEventListener('click', () => {
+    closeModal();
+    openInvoiceReview(order.id);
+  });
+  $('#orderDetailClose')?.addEventListener('click', closeModal);
+}
+
 function renderOrders() {
   const q = ($('#orderSearch').value || '').toLowerCase();
   const filter = $('#orderStatusFilter').value;
@@ -196,7 +504,7 @@ function renderOrders() {
   $('#ordersBody').innerHTML = list.map(order => `
     <tr>
       <td>#${String(order.id).padStart(6,'0')}</td>
-      <td>${new Date(order.created_at).toLocaleString('pt-BR')}<br><small>${escapeHtml(order.customer?.full_name || 'Cliente')}</small></td>
+      <td><button type="button" class="order-detail-trigger" data-order-detail="${order.id}">${new Date(order.created_at).toLocaleString('pt-BR')}<br><small>${escapeHtml(order.customer?.full_name || 'Cliente')}</small></button></td>
       <td>${(order.order_items || []).reduce((s,i)=>s+Number(i.quantity||0),0)}</td>
       <td>
         <select class="status-select" data-order="${order.id}">
@@ -233,6 +541,7 @@ function invoiceDraftPdf(order) {
   (order.order_items||[]).forEach(item=>{doc.text(String(item.product_name||'').slice(0,58),14,y);doc.text(String(item.quantity||0),132,y);doc.text(`R$ ${brl(item.subtotal).replace('R$ ','')}`,165,y);y+=7;if(y>260){doc.addPage();y=20;}});
   doc.line(14,y+2,196,y+2);y+=12;const subtotal=Number(order.subtotal??(order.order_items||[]).reduce((s,i)=>s+Number(i.subtotal||0),0));doc.text('Subtotal',125,y);doc.text(`R$ ${brl(subtotal).replace('R$ ','')}`,165,y);y+=7;
   if(order.coupon_code){doc.text(`Cupom ${order.coupon_code} (${Number(order.discount_percent||0).toLocaleString('pt-BR',{maximumFractionDigits:2})}%)`,90,y);doc.text(`- R$ ${brl(order.discount_amount).replace('R$ ','')}`,165,y);y+=7;}
+  doc.setFontSize(9);doc.setFont(undefined,'normal');doc.text(`Frete: ${String(order.shipping_method_name||'Não informado').slice(0,42)}`,90,y);doc.text(Number(order.shipping_amount||0)>0?`R$ ${brl(order.shipping_amount).replace('R$ ','')}`:'Grátis',165,y);y+=7;
   doc.setFontSize(13);doc.setFont(undefined,'bold');doc.text(`TOTAL: R$ ${brl(order.total).replace('R$ ','')}`,125,y);y+=15;doc.setFontSize(9);doc.setFont(undefined,'normal');doc.text('Documento gerado automaticamente e sujeito à revisão administrativa.',14,y);doc.text('Sem valor fiscal até a conferência e validação da equipe responsável.',14,y+6);
   return doc.output('blob');
 }
@@ -438,7 +747,7 @@ function productForm(id) {
 }
 
 function initialBalanceForm() {
-  if (adminUser?.id !== FINANCE_OWNER_ID) {
+  if (![FINANCE_OWNER_ID, FINANCE_ADMIN_ID].includes(adminUser?.id)) {
     showAdminMessage('Apenas o proprietário pode alterar o saldo inicial.', 'error');
     return;
   }
@@ -852,6 +1161,7 @@ async function savePaymentMethod(code, active) {
 async function refreshAdmin() {
   await loadAdminData();
   await loadProgressiveTiers();
+  await loadShippingAdmin();
   renderDashboard(); renderOrders(); renderStock(); renderProducts(); renderFinance(); renderPaymentMethodsAdmin(); termsSection(); renderSupport(); renderCoupons(); renderReviews(); renderProgressiveTiers();
   $('#lastUpdate').textContent = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 }
@@ -896,6 +1206,10 @@ $('#paymentMethodsAdmin')?.addEventListener('change', async event => {
 });
 $('#openCoupon').onclick = () => openCouponForm();
 $('#orderSearch').oninput = renderOrders;
+$('#ordersBody').addEventListener('click', event => {
+  const trigger = event.target.closest('[data-order-detail]');
+  if (trigger) openOrderDetails(trigger.dataset.orderDetail);
+});
 $('#orderStatusFilter').onchange = renderOrders;
 $('#stockSearch').oninput = renderStock;
 $('#supportSearch').oninput = renderSupport;

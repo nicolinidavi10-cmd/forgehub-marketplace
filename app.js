@@ -7,6 +7,104 @@ let currentCoupon = null;
 let currentProgressiveDiscount = null;
 let activePaymentMethods = [];
 
+// ==================== FRETES ====================
+let shippingMethods = [];
+let shippingSettings = { free_shipping_enabled: false, free_shipping_minimum: 0 };
+let selectedShippingMethod = null;
+
+async function fetchShippingOptions() {
+  const [{ data: methods, error: methodsError }, { data: settings, error: settingsError }] = await Promise.all([
+    db.from('shipping_methods')
+      .select('*')
+      .eq('active', true)
+      .order('sort_order', { ascending: true }),
+    db.from('shipping_settings')
+      .select('*')
+      .eq('id', 1)
+      .maybeSingle()
+  ]);
+
+  if (methodsError) throw methodsError;
+  if (settingsError) throw settingsError;
+
+  shippingMethods = methods || [];
+  shippingSettings = settings || { free_shipping_enabled: false, free_shipping_minimum: 0 };
+
+  if (!selectedShippingMethod || !shippingMethods.some(method => String(method.id) === String(selectedShippingMethod.id))) {
+    selectedShippingMethod = shippingMethods[0] || null;
+  }
+
+  return shippingMethods;
+}
+
+function calculateShippingAmount(subtotal = cartTotal()) {
+  const value = Number(subtotal || 0);
+  const freeShipping = shippingSettings.free_shipping_enabled &&
+    value >= Number(shippingSettings.free_shipping_minimum || 0);
+
+  if (freeShipping) return 0;
+  return Number(selectedShippingMethod?.price || 0);
+}
+
+function updateCheckoutTotals() {
+  const subtotal = cartTotal();
+  const discount = currentCoupon
+    ? Number(currentCoupon.discount || 0)
+    : Number(currentProgressiveDiscount?.discount || 0);
+  const shipping = calculateShippingAmount(subtotal);
+  const total = Math.max(0, subtotal - discount) + shipping;
+
+  const shippingLabel = document.querySelector('#checkoutShipping');
+  if (shippingLabel) {
+    shippingLabel.textContent = shipping > 0
+      ? `R$ ${money(shipping)}`
+      : 'Grátis';
+  }
+
+  const totalLabel = document.querySelector('#checkoutTotal');
+  if (totalLabel) totalLabel.textContent = `R$ ${money(total)}`;
+}
+
+function renderShippingOptions(subtotal = cartTotal()) {
+  const box = document.querySelector('#shippingOptions');
+  if (!box) return;
+
+  const free = shippingSettings.free_shipping_enabled &&
+    Number(subtotal || 0) >= Number(shippingSettings.free_shipping_minimum || 0);
+
+  if (!shippingMethods.length) {
+    box.innerHTML = '<p class="muted">Nenhuma opção de frete disponível no momento.</p>';
+    return;
+  }
+
+  box.innerHTML = shippingMethods.map((method, index) => {
+    const checked = selectedShippingMethod
+      ? String(selectedShippingMethod.id) === String(method.id)
+      : index === 0;
+
+    return `
+      <label class="shipping-option ${checked ? 'selected' : ''}">
+        <input type="radio" name="shipping_method" value="${method.id}" ${checked ? 'checked' : ''}>
+        <span class="shipping-option-copy">
+          <strong>${escapeHtml(method.name)}</strong>
+          <small>${free ? 'Frete grátis' : `R$ ${money(method.price)}`}</small>
+        </span>
+      </label>
+    `;
+  }).join('');
+
+  box.querySelectorAll('input[name="shipping_method"]').forEach(input => {
+    input.addEventListener('change', () => {
+      selectedShippingMethod =
+        shippingMethods.find(method => String(method.id) === String(input.value)) || null;
+
+      box.querySelectorAll('.shipping-option').forEach(option => option.classList.remove('selected'));
+      input.closest('.shipping-option')?.classList.add('selected');
+      updateCheckoutTotals();
+    });
+  });
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -414,6 +512,7 @@ async function openCheckout() {
   try {
     await fetchTerms();
     await fetchActivePaymentMethods();
+    await fetchShippingOptions();
   } catch (error) {
     console.error(error);
     showToast('Não foi possível carregar as opções de finalização da compra.', 'error');
@@ -465,9 +564,19 @@ async function openCheckout() {
     </div>
 
     <div class="checkout-section">
+      <div class="checkout-section-head"><strong>Frete</strong><span>Obrigatório</span></div>
+      <div id="shippingOptions" class="shipping-options"></div>
+    </div>
+
+    <div class="checkout-section">
       <div class="checkout-section-head"><strong>Forma de pagamento</strong><span>Obrigatório</span></div>
       <div class="payment-options" id="paymentOptions">${paymentOptions}</div>
     </div>
+    <div class="checkout-section">
+      <div class="checkout-section-head"><strong>Observação do pedido</strong><span>Opcional</span></div>
+      <textarea id="orderNote" maxlength="500" placeholder="Alguma informação importante para a separação ou entrega?"></textarea>
+    </div>
+
 
     <div class="coupon-box">
       <div class="coupon-box-head"><strong>Tem um cupom de desconto?</strong><span>Opcional</span></div>
@@ -482,7 +591,8 @@ async function openCheckout() {
       <span>Subtotal</span><strong id="checkoutSubtotal">R$ ${money(subtotal)}</strong>
       ${progressive?.percent ? `<span class="discount-line" id="progressiveDiscountLabel">Desconto progressivo (${progressive.percent}%)</span><strong class="discount-line" id="progressiveDiscount">- R$ ${money(progressive.discount)}</strong>` : ''}
       <span class="discount-line hidden" id="checkoutDiscountLabel">Cupom</span><strong class="discount-line hidden" id="checkoutDiscount">- R$ 0,00</strong>
-      <span>Total</span><strong id="checkoutTotal">R$ ${money(progressive?.total ?? subtotal)}</strong>
+      <span>Frete</span><strong id="checkoutShipping">R$ ${money(calculateShippingAmount(subtotal))}</strong>
+      <span>Total</span><strong id="checkoutTotal">R$ ${money((progressive?.total ?? subtotal) + calculateShippingAmount(subtotal))}</strong>
     </div>
 
     ${progressive?.percent ? `<div class="progressive-discount-box compact"><small>${progressive.nextMinValue != null ? `Faltam R$ ${money(Math.max(0, progressive.nextMinValue - subtotal))} para chegar a ${progressive.nextPercent}%.` : `Você alcançou a maior faixa de desconto progressivo.`}</small></div>` : ''}
@@ -501,6 +611,9 @@ async function openCheckout() {
     </div>
     <button class="buy" id="confirmOrder">Finalizar pedido</button>
   `;
+
+  renderShippingOptions(subtotal);
+  updateCheckoutTotals();
 
   detail.querySelectorAll('input[name="paymentMethod"]').forEach(input => input.addEventListener('change', () => {
     detail.querySelectorAll('.payment-option').forEach(option => option.classList.remove('selected'));
@@ -566,7 +679,7 @@ async function applyCheckoutCoupon() {
       document.querySelector('#checkoutDiscount')?.classList.add('hidden');
       document.querySelector('#progressiveDiscountLabel')?.classList.remove('hidden');
       document.querySelector('#progressiveDiscount')?.classList.remove('hidden');
-      document.querySelector('#checkoutTotal').textContent = `R$ ${money(Math.max(0, subtotal - progressiveDiscount))}`;
+      updateCheckoutTotals();
       feedback.textContent = `O desconto progressivo de ${currentProgressiveDiscount?.percent || 0}% é maior ou igual a este cupom. Os descontos não são acumulados.`;
       feedback.className = 'coupon-feedback error';
       return;
@@ -585,7 +698,7 @@ async function applyCheckoutCoupon() {
     document.querySelector('#checkoutDiscount')?.classList.remove('hidden');
     document.querySelector('#checkoutDiscountLabel').textContent = `Cupom (${currentCoupon.percent}%)`;
     document.querySelector('#checkoutDiscount').textContent = `- R$ ${money(currentCoupon.discount)}`;
-    document.querySelector('#checkoutTotal').textContent = `R$ ${money(currentCoupon.total)}`;
+    updateCheckoutTotals();
     feedback.textContent = `Cupom ${currentCoupon.code} aplicado. Ele substituiu o desconto progressivo porque oferece um desconto maior.`;
     feedback.className = 'coupon-feedback success';
   } catch (error) {
@@ -594,7 +707,7 @@ async function applyCheckoutCoupon() {
     document.querySelector('#checkoutDiscount')?.classList.add('hidden');
     document.querySelector('#progressiveDiscountLabel')?.classList.remove('hidden');
     document.querySelector('#progressiveDiscount')?.classList.remove('hidden');
-    document.querySelector('#checkoutTotal').textContent = `R$ ${money(currentProgressiveDiscount?.total ?? cartTotal())}`;
+    updateCheckoutTotals();
     feedback.textContent = error.message || 'Não foi possível aplicar o cupom.';
     feedback.className = 'coupon-feedback error';
   } finally {
@@ -637,6 +750,12 @@ async function createOrderFromCart() {
   const shippingNeighborhood = getValue('#shippingNeighborhood');
   const shippingComplement = getValue('#shippingComplement');
   const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked')?.value;
+  const orderNote = String(document.querySelector('#orderNote')?.value || '').trim();
+
+  if (!selectedShippingMethod) {
+    showToast('Selecione uma modalidade de frete.', 'error');
+    return;
+  }
 
   if (!/^\d{5}-?\d{3}$/.test(shippingCep)) {
     showToast('Informe um CEP válido.', 'error');
@@ -671,6 +790,8 @@ async function createOrderFromCart() {
       p_shipping_number: shippingNumber,
       p_shipping_neighborhood: shippingNeighborhood,
       p_shipping_complement: shippingComplement || null,
+      p_shipping_method_id: Number(selectedShippingMethod.id),
+      p_order_note: orderNote || null,
       p_payment_method: paymentMethod
     });
 
@@ -991,6 +1112,8 @@ function showReceipt(order) {
       ${items.map(item => `<div class="receipt-item"><span>${item.quantity}x ${item.product_name}</span><strong>R$ ${money(item.subtotal)}</strong></div>`).join('')}
     </div>
     ${order.coupon_code ? `<div class="receipt-coupon"><span>Cupom ${escapeHtml(order.coupon_code)} (${Number(order.discount_percent||0).toLocaleString('pt-BR',{maximumFractionDigits:2})}%)</span><strong>- R$ ${money(order.discount_amount)}</strong></div>` : ''}
+    <div class="receipt-coupon"><span>Frete · ${escapeHtml(order.shipping_method_name || 'Não informado')}</span><strong>${Number(order.shipping_amount || 0) > 0 ? `R$ ${money(order.shipping_amount)}` : 'Grátis'}</strong></div>
+    ${order.order_note ? `<div class="receipt-coupon"><span>Observação</span><strong>${escapeHtml(order.order_note)}</strong></div>` : ''}
     <div class="receipt-total"><span>Total</span><strong>R$ ${money(order.total)}</strong></div>
     <div class="pix-box"><div class="pix-title"><span class="pix-symbol">◆</span><strong>Pagamento ${escapeHtml(order.payment_method_name || order.payment_method || 'simulado')}</strong></div><p>Este pedido utiliza uma simulação de pagamento para fins demonstrativos do marketplace.</p><div class="pix-code">PAGAMENTO-SIMULADO-${orderNumber}</div></div>
     <div class="receipt-actions">

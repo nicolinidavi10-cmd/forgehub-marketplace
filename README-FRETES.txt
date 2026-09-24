@@ -1,22 +1,31 @@
-SISTEMA DE FRETES - BRENNTagHUB
+BrenntagHub - Fretes
 
-1. Abra o arquivo:
+1. No Supabase SQL Editor, execute:
    brenntag_frete_patch.sql
 
-2. Cole o conteúdo inteiro no Supabase > SQL Editor e execute.
+2. Depois substitua no projeto:
+   app.js
+   admin.js
+   admin.html
+   style.css
+   admin.css
 
-3. O SQL cria:
-   - shipping_methods
-   - shipping_settings
-   - 3 opções iniciais: Econômico, Padrão e Expresso
-   - campos de frete em orders
+3. Faça commit e push normalmente.
 
-4. Depois do SQL, o próximo passo é atualizar app.js e admin.js para:
-   - cliente escolher o frete no checkout
-   - calcular frete grátis
-   - administrador editar/ativar/desativar fretes
-   - mostrar frete no detalhe do pedido
-   - registrar o valor escolhido no pedido
+O sistema inclui:
+- Econômico, Padrão e Expresso
+- preço editável no Admin
+- ativar/desativar modalidades
+- adicionar e remover modalidades
+- frete grátis ativável/desativável
+- valor mínimo para frete grátis
+- escolha do frete no checkout
+- frete somado ao total do pedido
+- frete salvo no pedido
+- observação do pedido salva no pedido
+- detalhes do pedido no Admin
+- endereço, produtos, pagamento, frete, descontos, total e NF no detalhe
+- frete exibido no documento preliminar da NF
 
-IMPORTANTE:
-O SQL sozinho prepara o banco; ele não altera a interface do site.
+Importante:
+O frete é calculado novamente no servidor. O valor enviado pelo navegador não é usado como autoridade.
