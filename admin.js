@@ -362,6 +362,7 @@ function productForm(id) {
     <h2>${id ? 'Editar' : 'Cadastrar'} produto</h2>
     <form id="productForm" class="form-grid">
       <label>Nome<input name="name" required value="${escapeHtml(p.name)}"></label>
+      <label>Código do produto<input name="product_code" required value="${escapeHtml(p.product_code || '')}" placeholder="Ex.: PROD-001"></label>
       <label>Categoria<input name="category" required value="${escapeHtml(p.category)}"></label>
       <label>Preço<input name="price" type="text" inputmode="decimal" required value="${p.price !== '' ? escapeHtml(p.price) : ''}" placeholder="Ex.: 189,90"></label>
       <label>Estoque<input name="stock" type="number" min="0" required value="${p.stock || 0}"></label>
@@ -407,6 +408,7 @@ function productForm(id) {
 
       const payload = {
         name: values.name.trim(),
+        product_code: values.product_code.trim(),
         category: values.category.trim(),
         price,
         stock: Number(values.stock || 0),
